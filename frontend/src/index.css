@@ -63,6 +63,9 @@ body,
 .theme-dark,
 .theme-light {
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   background: var(--bg);
   color: var(--text);
 }
@@ -88,7 +91,7 @@ a {
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
