@@ -3467,3 +3467,8 @@ html {
   line-height: 1.6;
   margin: 0;
 }
+@media (max-width: 700px) {
+  .hero-section {
+    min-height: 60vh;
+  }
+}
