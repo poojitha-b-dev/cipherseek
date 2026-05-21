@@ -3,10 +3,10 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 
 const NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", icon: "⬡" },
-  { id: "upload",    label: "Encrypt & Store", icon: "⬢" },
-  { id: "search",    label: "Search", icon: "◎" },
-  { id: "about",     label: "About", icon: "◈" },
+  { id: "dashboard", label: "Dashboard",      icon: "⬡", mobileIcon: "🏠" },
+  { id: "upload",    label: "Encrypt & Store", icon: "⬢", mobileIcon: "🔒" },
+  { id: "search",    label: "Search",          icon: "◎", mobileIcon: "🔍" },
+  { id: "about",     label: "About",           icon: "◈", mobileIcon: "ℹ️" },
 ];
 
 function ShieldIcon() {
@@ -31,62 +31,58 @@ export default function Navbar({ page, setPage }) {
   };
 
   return (
-    <nav className="navbar" style={{ position: "relative" }}>
-      {/* Brand */}
-      <div className="navbar-brand">
-        <ShieldIcon />
-        <div>
-          <div className="brand-title">PPSE</div>
-          <div className="brand-sub">Privacy-Preserving Searchable Encryption</div>
+    <>
+      {/* ── TOP NAVBAR (desktop + mobile top bar) ── */}
+      <nav className="navbar" style={{ position: "relative" }}>
+        {/* Brand */}
+        <div className="navbar-brand">
+          <ShieldIcon />
+          <div>
+            <div className="brand-title">PPSE</div>
+            <div className="brand-sub">Privacy-Preserving Searchable Encryption</div>
+          </div>
         </div>
-      </div>
 
-      {/* Desktop nav links */}
-      <div className="nav-links">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            className={`nav-btn ${page === item.id ? "active" : ""}`}
-            onClick={() => navigate(item.id)}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Right side */}
-      <div className="navbar-right">
-        <button className="theme-toggle" onClick={toggle} title="Toggle theme">
-          {dark ? "☀" : "🌙"}
-        </button>
-        <div className="user-pill">
-          <span className="user-avatar">{user?.username?.[0]?.toUpperCase() || "U"}</span>
-          <span className="user-name">{user?.username || user?.email}</span>
-        </div>
-        <button className="logout-btn" onClick={logout}>Logout</button>
-
-        {/* Hamburger — mobile only */}
-        <button className="hamburger-btn" onClick={() => setMenuOpen(!menuOpen)}>
-          {menuOpen ? "✕" : "☰"}
-        </button>
-      </div>
-
-      {/* Mobile dropdown */}
-      {menuOpen && (
-        <div className="mobile-menu">
+        {/* Desktop nav links */}
+        <div className="nav-links">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
-              className={`mobile-nav-btn ${page === item.id ? "active" : ""}`}
+              className={`nav-btn ${page === item.id ? "active" : ""}`}
               onClick={() => navigate(item.id)}
             >
-              <span>{item.icon}</span>
+              <span className="nav-icon">{item.icon}</span>
               {item.label}
             </button>
           ))}
         </div>
-      )}
-    </nav>
+
+        {/* Right side */}
+        <div className="navbar-right">
+          <button className="theme-toggle" onClick={toggle} title="Toggle theme">
+            {dark ? "☀" : "🌙"}
+          </button>
+          <div className="user-pill">
+            <span className="user-avatar">{user?.username?.[0]?.toUpperCase() || "U"}</span>
+            <span className="user-name">{user?.username || user?.email}</span>
+          </div>
+          <button className="logout-btn" onClick={logout}>Logout</button>
+        </div>
+      </nav>
+
+      {/* ── BOTTOM TAB BAR (mobile only) ── */}
+      <nav className="bottom-tab-bar">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            className={`bottom-tab ${page === item.id ? "active" : ""}`}
+            onClick={() => navigate(item.id)}
+          >
+            <span className="bottom-tab-icon">{item.mobileIcon}</span>
+            <span className="bottom-tab-label">{item.label}</span>
+          </button>
+        ))}
+      </nav>
+    </>
   );
 }

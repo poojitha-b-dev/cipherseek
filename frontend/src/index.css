@@ -3475,3 +3475,89 @@ html {
     min-height: 60vh;
   }
 }
+/* ── BOTTOM TAB BAR (mobile only) ── */
+.bottom-tab-bar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+
+  /* Hide hamburger completely - no longer needed */
+  .hamburger-btn {
+    display: none !important;
+  }
+
+  /* Shrink top navbar on mobile - just brand + right icons */
+  .nav-links {
+    display: none !important;
+  }
+
+  /* Give page content bottom padding so tab bar doesn't cover it */
+  .main-content {
+    padding-bottom: 80px;
+  }
+
+  /* Show the bottom tab bar */
+  .bottom-tab-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--border);
+    z-index: 1000;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .bottom-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-2);
+    transition: color 0.2s, background 0.2s;
+    padding: 6px 0;
+    position: relative;
+  }
+
+  .bottom-tab::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    border-radius: 0 0 4px 4px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .bottom-tab.active::before {
+    opacity: 1;
+  }
+
+  .bottom-tab.active {
+    color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .bottom-tab-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .bottom-tab-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+}
