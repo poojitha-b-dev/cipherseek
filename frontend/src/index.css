@@ -1128,8 +1128,8 @@ a {
 
 /* Mobile dropdown menu */
 .mobile-menu {
-  position: absolute;
-  top: 100%;
+  position: fixed;
+  top: 56px;        /* matches the mobile navbar height */
   left: 0;
   right: 0;
   background: var(--bg-2);
