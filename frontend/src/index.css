@@ -1176,9 +1176,24 @@ a {
 
 @media (max-width: 700px) {
   .navbar {
-    padding: 10px 12px;
-    height: auto;
-    flex-wrap: wrap;
+    padding: 0 12px;
+    height: 56px;
+    flex-wrap: nowrap;
+    overflow: visible;
+  }
+
+  .navbar-brand {
+    flex-shrink: 1;
+    min-width: 0;
+    margin-right: 0;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .brand-title {
+    font-size: 13px;
   }
 
   .nav-links {
@@ -1196,10 +1211,30 @@ a {
   .hamburger-btn {
     display: flex;
     align-items: center;
+    flex-shrink: 0;
   }
 
   .user-name {
     display: none;
+  }
+
+  .navbar-right {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .logout-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .user-pill {
+    padding: 3px 8px 3px 3px;
+  }
+
+  .theme-toggle {
+    padding: 5px 7px;
+    font-size: 13px;
   }
 }
 
