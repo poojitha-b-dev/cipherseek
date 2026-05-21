@@ -7,7 +7,7 @@ export function ThemeProvider({ children }) {
   const toggle = () => setDark((d) => !d);
   return (
     <ThemeContext.Provider value={{ dark, toggle }}>
-      <div className={dark ? "theme-dark" : "theme-light"}>{children}</div>
+      <div className={dark ? "theme-dark" : "theme-light"} style={{ overflow: "visible", position: "relative" }}>{children}</div>
     </ThemeContext.Provider>
   );
 }
