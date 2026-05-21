@@ -8,10 +8,42 @@ export default function About() {
     { icon: "🛡", title: "Access Control", desc: "Role-based control: Users manage their own data. Admins operate the system but cannot view or decrypt user content." },
   ];
 
-  const team = [
-    { name: "Pothula Anjali", roll: "22321A1214" },
-    { name: "Banoth Poojitha", roll: "22321A1261" },
-    { name: "Thokala Archana", roll: "22325A1203" },
+  const steps = [
+    {
+      step: "01",
+      icon: "🔑",
+      title: "Key Generation",
+      desc: "A public-private key pair is generated using RSA/ElGamal. The public key is used for encryption; the private key stays with the user and is never sent to the server.",
+      tag: "Setup Phase",
+    },
+    {
+      step: "02",
+      icon: "🔒",
+      title: "Encrypt & Index",
+      desc: "Document content is encrypted using AES-256-CBC. Keywords are hashed with SHA-256 and stored as an encrypted index — the server only ever sees ciphertext.",
+      tag: "Storage Phase",
+    },
+    {
+      step: "03",
+      icon: "🚪",
+      title: "Trapdoor Generation",
+      desc: "When the user wants to search, a cryptographic trapdoor token is derived from their private key and the keyword hash. This token is sent to the server instead of the raw keyword.",
+      tag: "Search Phase",
+    },
+    {
+      step: "04",
+      icon: "🔍",
+      title: "Secure Search",
+      desc: "The server tests the trapdoor against the encrypted index entries. Matching documents are returned — without the server ever learning what keyword was searched.",
+      tag: "Match Phase",
+    },
+    {
+      step: "05",
+      icon: "📄",
+      title: "Decrypt Results",
+      desc: "Matched encrypted documents are decrypted client-side using the user's private key. Plaintext is only ever visible to the authorized user, never stored or logged.",
+      tag: "Output Phase",
+    },
   ];
 
   return (
@@ -72,23 +104,30 @@ export default function About() {
           </div>
         </div>
 
-        <div className="about-card">
-          <h2 className="section-title">Team</h2>
-          <div className="team-list">
-            {team.map((t) => (
-              <div key={t.roll} className="team-member">
-                <div className="team-avatar">{t.name[0]}</div>
-                <div>
-                  <div className="team-name">{t.name}</div>
-                  <div className="team-roll">{t.roll}</div>
+        {/* How It Works — replaces Team */}
+        <div className="about-card wide">
+          <h2 className="section-title">How It Works</h2>
+          <p className="about-text" style={{ marginBottom: "1.25rem" }}>
+            PPSE operates in five distinct phases — from key setup to secure document retrieval —
+            ensuring end-to-end privacy with zero plaintext exposure on the server.
+          </p>
+          <div className="hiw-steps">
+            {steps.map((s, i) => (
+              <div className="hiw-step" key={s.step}>
+                <div className="hiw-left">
+                  <div className="hiw-number">{s.step}</div>
+                  {i < steps.length - 1 && <div className="hiw-line" />}
+                </div>
+                <div className="hiw-body">
+                  <div className="hiw-header">
+                    <span className="hiw-icon">{s.icon}</span>
+                    <span className="hiw-title">{s.title}</span>
+                    <span className="hiw-tag">{s.tag}</span>
+                  </div>
+                  <p className="hiw-desc">{s.desc}</p>
                 </div>
               </div>
             ))}
-          </div>
-          <div className="college-badge">
-            <div className="college-name">Bhoj Reddy Engineering College for Women</div>
-            <div className="college-dept">Department of Information Technology · AY 2025-26</div>
-            <div className="college-guide">Guide: B. Anitha | HOD: Dr. M. Sandhya Rani</div>
           </div>
         </div>
       </div>

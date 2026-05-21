@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
-
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function Upload() {
   const { authFetch } = useAuth();
   const [mode, setMode] = useState("text");
@@ -53,7 +53,7 @@ export default function Upload() {
         fd.append("document", file);
         fd.append("format", file.type || "application/octet-stream");
       }
-      const res = await authFetch("http://localhost:5000/api/documents/save", {
+      const res = await authFetch(`${API_URL}/api/documents/save`, {
         method: "POST",
         body: fd,
       });

@@ -1,27 +1,26 @@
-/**
- * documentRoutes.js – PEKS-upgraded version
- *
- * Changes from original:
- *  - Upload:  SHA-256 keyword hash REPLACED by PEKS ciphertext
- *  - Search:  Hash comparison REPLACED by PEKS Test() function
- *  - AES-256 file encryption UNCHANGED
- *  - JWT authentication UNCHANGED
- */
-
-'use strict';
-
-const express    = require('express');
-const multer     = require('multer');
+const express = require('express');
+const multer = require('multer');
 const { encryptDocument, decryptDocument } = require('../utils/crypto');
 const connection = require('../config/db');
-const jwt        = require('jsonwebtoken');
-const peks       = require('../peks');
+const jwt = require('jsonwebtoken');
 
-const router  = express.Router();
+// ✅ peks.js is at backend/peks.js, routes file is at backend/routes/documentRoutes.js
+// So the correct relative path is '../peks'
+const {
+  PEKS,
+  Trapdoor,
+  Test,
+  deriveUserKeyPair,
+  serializeCiphertext,
+  deserializeCiphertext,
+} = require('../peks');
+
+const router = express.Router();
+
 const storage = multer.memoryStorage();
-const upload  = multer({ storage });
+const upload = multer({ storage });
 
-// ─── JWT MIDDLEWARE (unchanged) ───────────────────────────────────────────────
+// ─── JWT MIDDLEWARE ───────────────────────────────────────────────────────────
 const authenticateUser = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token) return res.status(403).json({ message: 'Access denied' });
@@ -33,23 +32,7 @@ const authenticateUser = (req, res, next) => {
   });
 };
 
-// ─── HELPER: get per-user PEKS key pair ──────────────────────────────────────
-function getUserKeyPair(userId) {
-  // PEKS_MASTER_SECRET must be in .env (32+ random bytes, hex-encoded)
-  const masterSecret = process.env.PEKS_MASTER_SECRET ||
-                       process.env.JWT_SECRET;   // fallback for migration ease
-  return peks.deriveUserKeyPair(masterSecret, String(userId));
-}
-
-// ─── ROUTE: POST /api/documents/save ─────────────────────────────────────────
-/**
- * PEKS change: Instead of storing keyword_hash = SHA256(keyword),
- * we store peks_ciphertext = PEKS(publicKey, keyword).
- *
- * The keyword never appears in plaintext in the database.
- * The ciphertext is randomised so two uploads of the same keyword
- * produce different stored values (unlinkability).
- */
+// ─── SAVE ─────────────────────────────────────────────────────────────────────
 router.post('/save', authenticateUser, upload.single('document'), async (req, res) => {
   const { keyword, format } = req.body;
 
@@ -57,12 +40,47 @@ router.post('/save', authenticateUser, upload.single('document'), async (req, re
     return res.status(400).json({ message: 'Missing fields' });
   }
 
-  // ── PEKS: encrypt keyword under user's public key ──
-  const { publicKey } = getUserKeyPair(req.userId);
-  const ciphertext     = peks.PEKS(publicKey, keyword);
-  const peksCiphertext = peks.serializeCiphertext(ciphertext);
+  // Derive this user's PEKS key pair — deterministic per user
+  const { publicKey, privateKey } = deriveUserKeyPair(
+    process.env.PEKS_MASTER_SECRET,
+    String(req.userId)
+  );
 
-  // ── AES-256 file encryption (unchanged) ──
+  // ── DUPLICATE CHECK via PEKS Trapdoor + Test() ───────────────────────────
+  // Generate trapdoor for incoming keyword, test against all stored ciphertexts
+  try {
+    const [existing] = await connection.promise().query(
+      'SELECT id, peks_ciphertext FROM documents WHERE user_id = ? AND peks_ciphertext IS NOT NULL',
+      [req.userId]
+    );
+
+    const trapdoor = Trapdoor(privateKey, keyword);
+
+    for (const row of existing) {
+      try {
+        const ct = deserializeCiphertext(row.peks_ciphertext);
+        if (Test(ct, trapdoor, privateKey)) {
+          // ✅ Keyword already exists — block the save and return clear error
+          return res.status(409).json({
+            message: `A document with the keyword "${keyword}" already exists. Search for it instead, or use a different keyword.`,
+          });
+        }
+      } catch {
+        // Skip malformed rows
+      }
+    }
+  } catch (err) {
+    console.error('PEKS duplicate check error:', err);
+    return res.status(500).json({ message: 'Error checking for duplicate keyword' });
+  }
+
+  // ── PEKS encrypt the keyword ──────────────────────────────────────────────
+  const peksCiphertext = serializeCiphertext(PEKS(publicKey, keyword));
+
+  // ── AES encrypt the keyword for storage ──────────────────────────────────
+  const { encryptedData: encryptedKeyword, iv: keywordIV } = encryptDocument(keyword);
+
+  // ── Encrypt / buffer the document body ───────────────────────────────────
   let documentData, docIV = null;
   if (format === 'text') {
     const text = req.file.buffer.toString('utf-8');
@@ -73,101 +91,99 @@ router.post('/save', authenticateUser, upload.single('document'), async (req, re
     documentData = req.file.buffer;
   }
 
-  // Note: no keyword_hash column needed anymore; peks_ciphertext replaces it.
-  // We keep a NULL keyword_hash for backward compatibility if your DB has it.
+  // ── INSERT — always a new row ─────────────────────────────────────────────
   const sql = `
-    INSERT INTO documents (user_id, peks_ciphertext, document, iv, format)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO documents
+      (user_id, keyword, keyword_iv, peks_ciphertext, document, iv, format)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
 
   try {
     const [result] = await connection.promise().query(sql, [
       req.userId,
-      peksCiphertext,
+      encryptedKeyword,   // AES-encrypted keyword (for reference)
+      keywordIV,
+      peksCiphertext,     // ✅ PEKS ciphertext — this is what search uses
       documentData,
       docIV,
       format,
     ]);
     res.status(201).json({ message: 'Document saved', documentId: result.insertId });
   } catch (error) {
-    console.error('Save error:', error);
+    console.error(error);
     res.status(500).json({ message: 'Database error' });
   }
 });
 
-// ─── ROUTE: POST /api/documents/verify ───────────────────────────────────────
-/**
- * PEKS change: Instead of WHERE keyword_hash = SHA256(query),
- * we:
- *   1. Generate trapdoor Trapdoor(privateKey, query)
- *   2. Fetch ALL user's documents
- *   3. Run Test(ciphertext, trapdoor, privateKey) on each
- *
- * The server tests matches using only the trapdoor; it never
- * decrypts or compares the keyword in plaintext.
- *
- * Performance note: for large collections, a PEKS index or
- * server-side Test() stored procedure would be used. For this
- * academic demo we do it in application code.
- */
+// ─── SEARCH via PEKS Trapdoor + Test() ────────────────────────────────────────
 router.post('/verify', authenticateUser, async (req, res) => {
   const { keyword } = req.body;
   if (!keyword) return res.status(400).json({ message: 'Keyword is required' });
 
-  // ── Generate search trapdoor ──
-  const { privateKey } = getUserKeyPair(req.userId);
-  const trapdoor = peks.Trapdoor(privateKey, keyword);
+  // Derive this user's key pair
+  const { privateKey } = deriveUserKeyPair(
+    process.env.PEKS_MASTER_SECRET,
+    String(req.userId)
+  );
 
-  // ── Fetch all user's documents ──
-  const sql = `
-    SELECT id, peks_ciphertext, document, iv, format, created_at
-    FROM documents
-    WHERE user_id = ?
-    ORDER BY created_at DESC
-  `;
+  // Generate trapdoor for the search keyword
+  const trapdoor = Trapdoor(privateKey, keyword);
 
   try {
-    const [rows] = await connection.promise().query(sql, [req.userId]);
+    // Fetch all docs for this user that have a PEKS ciphertext
+    const [rows] = await connection.promise().query(
+      'SELECT * FROM documents WHERE user_id = ? AND peks_ciphertext IS NOT NULL ORDER BY created_at DESC',
+      [req.userId]
+    );
 
-    // ── PEKS Test: find matching documents ──
-    const matchingDoc = rows.find(row => {
+    if (!rows.length) {
+      return res.status(404).json({ message: 'No documents found for that keyword' });
+    }
+
+    // ✅ Run Test() on each row — pure PEKS search, no plaintext keyword used
+    const matched = rows.filter((row) => {
       try {
-        const ct = peks.deserializeCiphertext(row.peks_ciphertext);
-        return peks.Test(ct, trapdoor, privateKey);
+        const ct = deserializeCiphertext(row.peks_ciphertext);
+        return Test(ct, trapdoor, privateKey);
       } catch {
         return false;
       }
     });
 
-    if (!matchingDoc) {
-      return res.status(404).json({ message: 'Document not found' });
+    if (!matched.length) {
+      return res.status(404).json({ message: 'No documents found for that keyword' });
     }
 
-    // ── Return document (AES decryption unchanged) ──
-    if (matchingDoc.format === 'text') {
-      const decrypted = decryptDocument(
-        matchingDoc.document.toString('hex'),
-        matchingDoc.iv
-      );
-      res.setHeader('Content-Type', 'text/plain');
-      return res.send(decrypted);
-    } else {
-      const mimeType = getMimeType(matchingDoc.format);
-      res.setHeader('Content-Type', mimeType);
-      res.setHeader('Content-Disposition',
-        `attachment; filename="document.${matchingDoc.format.split('/')[1]}"`);
-      return res.send(matchingDoc.document);
-    }
+    // Decrypt document content for matched rows and return
+    const documents = matched.map((doc, i) => {
+      if (doc.format === 'text') {
+        return {
+          id: doc.id,
+          number: i + 1,
+          format: 'text',
+          content: decryptDocument(doc.document.toString('hex'), doc.iv),
+          created_at: doc.created_at,
+        };
+      } else {
+        return {
+          id: doc.id,
+          number: i + 1,
+          format: doc.format,
+          content: doc.document.toString('base64'),
+          created_at: doc.created_at,
+        };
+      }
+    });
+
+    return res.json({ found: documents.length, documents });
 
   } catch (error) {
-    console.error('Search error:', error);
+    console.error(error);
     res.status(500).json({ message: 'Search error' });
   }
 });
 
-// ─── ROUTE: GET /api/documents/list ──────────────────────────────────────────
-// New utility endpoint – lists user's document IDs and timestamps
-// (no keyword leakage; ciphertexts not returned)
+// ─── LIST ─────────────────────────────────────────────────────────────────────
 router.get('/list', authenticateUser, async (req, res) => {
   try {
     const [rows] = await connection.promise().query(
@@ -180,18 +196,5 @@ router.get('/list', authenticateUser, async (req, res) => {
     res.status(500).json({ message: 'Error fetching documents' });
   }
 });
-
-// ─── HELPER ───────────────────────────────────────────────────────────────────
-function getMimeType(format) {
-  switch (format) {
-    case 'application/pdf': return 'application/pdf';
-    case 'application/msword':
-    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-      return 'application/msword';
-    case 'image/jpeg': return 'image/jpeg';
-    case 'image/png':  return 'image/png';
-    default:           return 'application/octet-stream';
-  }
-}
 
 module.exports = router;

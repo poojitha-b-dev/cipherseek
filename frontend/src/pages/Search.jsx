@@ -1,33 +1,33 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function Search() {
   const { authFetch } = useAuth();
 
-  const [query, setQuery] = useState("");
-  const [result, setResult] = useState(null);
+  const [query, setQuery]       = useState("");
+  const [results, setResults]   = useState([]);   // ← now an ARRAY
   const [searched, setSearched] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
 
   const handleSearch = async (e) => {
     e.preventDefault();
 
     if (!query.trim()) {
-      setResult(null);
+      setResults([]);
       setSearched(false);
       setError("");
       return;
     }
 
     setError("");
-    setResult(null);
+    setResults([]);
     setSearched(false);
     setLoading(true);
 
     try {
       const res = await authFetch(
-        "http://localhost:5000/api/documents/verify",
+        `${API_URL}/api/documents/verify`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -36,7 +36,7 @@ export default function Search() {
       );
 
       if (res.status === 404) {
-        setResult(null);
+        setResults([]);
         setSearched(true);
         setLoading(false);
         return;
@@ -47,20 +47,11 @@ export default function Search() {
         throw new Error(data.message || "Search failed");
       }
 
-      const contentType = res.headers.get("content-type") || "";
-
-      if (contentType.includes("text/plain")) {
-        const text = await res.text();
-        setResult({ type: "text", content: text });
-      } else {
-        const blob = await res.blob();
-        setResult({
-          type: "file",
-          fileUrl: URL.createObjectURL(blob),
-        });
-      }
-
+      // Backend now returns { found: N, documents: [...] }
+      const data = await res.json();
+      setResults(data.documents || []);
       setSearched(true);
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -68,38 +59,35 @@ export default function Search() {
     }
   };
 
-  const renderResult = () => {
-    if (!result) return null;
-
-    if (result.type === "text") {
-      return <pre className="decrypted-content">{result.content}</pre>;
-    }
-
-    return (
-      <a href={result.fileUrl} download="document" className="btn btn-primary">
-        Download File
-      </a>
-    );
+  // Download a binary file (PDF, image, etc.)
+  const handleDownload = (doc) => {
+    const bytes = atob(doc.content);
+    const arr   = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: doc.format });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `document-${doc.id}.${doc.format.split("/")[1] || "bin"}`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleString() : "";
 
   return (
     <div className="search-page">
 
-      {/* ===== CENTERED HEADER ===== */}
+      {/* ── HEADER ── */}
       <div className="search-container">
-
         <div className="search-header">
           <h1>Search Documents</h1>
-          <p>
-            Search encrypted documents using secure keyword trapdoors
-          </p>
+          <p>Search encrypted documents using secure keyword trapdoors</p>
         </div>
 
-        {/* ===== MAIN CARD ===== */}
+        {/* ── FORM ── */}
         <div className="search-card-centered">
-
           <form onSubmit={handleSearch}>
-
             <label className="field-label">Search Keyword</label>
 
             <div className="search-box">
@@ -109,14 +97,9 @@ export default function Search() {
                 placeholder="Enter keyword to search..."
                 value={query}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  setQuery(value);
-                
-                  if (!value.trim()) {
-                    setResult(null);
-                    setSearched(false);
-                    setError("");
-                  }
+                  const v = e.target.value;
+                  setQuery(v);
+                  if (!v.trim()) { setResults([]); setSearched(false); setError(""); }
                 }}
                 autoFocus
               />
@@ -133,14 +116,11 @@ export default function Search() {
             <p className="search-hint">
               🔒 Your keyword is hashed (SHA-256) before reaching the server
             </p>
-
           </form>
-
         </div>
-
       </div>
 
-      {/* ===== RESULTS SECTION (UNCHANGED LOGIC) ===== */}
+      {/* ── RESULTS ── */}
       <div className="search-layout">
 
         {error && <div className="alert alert-error">{error}</div>}
@@ -152,36 +132,69 @@ export default function Search() {
           </div>
         )}
 
-        {searched && !loading && !result && (
+        {/* Nothing found */}
+        {searched && !loading && results.length === 0 && (
           <div className="empty-state">
             <div className="empty-icon">🔍</div>
-            <p>
-              No document found for "<strong>{query}</strong>"
-            </p>
+            <p>No document found for "<strong>{query}</strong>"</p>
           </div>
         )}
 
-        {searched && !loading && result && (
-          <div className="doc-card">
-            <div className="doc-card-header">
-              <span className="doc-icon">📄</span>
-              <div>
-                <div className="doc-name">
-                  Document found for "{query}"
-                </div>
-                <div className="doc-meta">
-                  Decrypted successfully
-                </div>
-              </div>
-              <span className="badge badge-match">Match</span>
+        {/* Results found */}
+        {searched && !loading && results.length > 0 && (
+          <div>
+
+            {/* Count badge */}
+            <div style={{ marginBottom: "1rem" }}>
+              <span className="badge badge-match" style={{ fontSize: "0.95rem", padding: "0.4rem 1rem" }}>
+                {results.length} document{results.length > 1 ? "s" : ""} found for &quot;{query}&quot;
+              </span>
             </div>
 
-            {renderResult()}
+            {/* One card per document */}
+            {results.map((doc) => (
+              <div className="doc-card" key={doc.id} style={{ marginBottom: "1.25rem" }}>
+
+                <div className="doc-card-header">
+                  <span className="doc-icon">📄</span>
+                  <div>
+                    <div className="doc-name">
+                      Document #{doc.number}
+                      <span style={{ fontWeight: 400, color: "#888", fontSize: "0.82rem", marginLeft: "0.5rem" }}>
+                        (ID: {doc.id})
+                      </span>
+                    </div>
+                    <div className="doc-meta">
+                      {doc.format === "text" ? "Text document" : doc.format}
+                      {doc.created_at && <> &nbsp;·&nbsp; {fmtDate(doc.created_at)}</>}
+                    </div>
+                  </div>
+                  <span className="badge badge-match">Match</span>
+                </div>
+
+                {/* Show text inline */}
+                {doc.format === "text" && (
+                  <pre className="decrypted-content" style={{ marginTop: "0.75rem" }}>
+                    {doc.content}
+                  </pre>
+                )}
+
+                {/* Binary — download button */}
+                {doc.format !== "text" && (
+                  <div style={{ marginTop: "0.75rem" }}>
+                    <button className="btn btn-primary" onClick={() => handleDownload(doc)}>
+                      ⬇ Download File
+                    </button>
+                  </div>
+                )}
+
+              </div>
+            ))}
+
           </div>
         )}
 
       </div>
-
     </div>
   );
 }

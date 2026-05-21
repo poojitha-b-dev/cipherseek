@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import heroBg from "../assets/hero-bg.png";
-
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const cryptoBadges = [
   { label: "AES-256", icon: "🔒", cls: "cbadge-aes" },
-  { label: "RSA", icon: "🔑", cls: "cbadge-rsa" },
+  { label: "ECC", icon: "🔐", cls: "cbadge-rsa" },
   { label: "SHA-256", icon: "#", cls: "cbadge-sha" },
   { label: "JWT", icon: "🪙", cls: "cbadge-jwt" },
   { label: "PEKS", icon: "🔍", cls: "cbadge-peks" },
@@ -25,7 +25,8 @@ export default function Dashboard({ setPage }) {
   useEffect(() => {
     async function fetchDocs() {
       try {
-        const res = await authFetch("http://localhost:5000/api/documents");
+        // After
+        const res = await authFetch(`${API_URL}/api/documents`);
         const data = await res.json();
         setDocs(Array.isArray(data) ? data : data.documents || []);
       } catch {
@@ -100,6 +101,18 @@ export default function Dashboard({ setPage }) {
           ))}
         </div>
       </div>
+
+      {/* FOOTER */}
+      <footer className="db-footer">
+        <div className="db-footer-inner">
+          <span className="db-footer-lock">🔐</span>
+          <div className="db-footer-text">
+            <span className="db-footer-built">Designed &amp; developed by</span>
+            <span className="db-footer-name">Banoth Poojitha</span>
+            <span className="db-footer-meta"> Bhoj Reddy Engineering College for Women · IT Dept · 2025-26</span>
+          </div>
+        </div>
+      </footer>
 
     </div>
   );
