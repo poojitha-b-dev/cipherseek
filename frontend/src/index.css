@@ -70,6 +70,7 @@ body,
   flex: 1;
   background: var(--bg);
   color: var(--text);
+  overflow: visible;
 }
 
 button {
@@ -93,13 +94,13 @@ a {
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  overflow: visible;
+  min-height: 100dvh;
 }
 
 .main-content {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
   min-height: 0;
   padding: 0;
 }
@@ -117,6 +118,7 @@ a {
   top: 0;
   z-index: 100;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .navbar-brand {
