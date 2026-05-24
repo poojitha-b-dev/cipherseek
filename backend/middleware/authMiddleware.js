@@ -1,25 +1,35 @@
+// backend/middleware/authMiddleware.js
+// JWT authentication middleware for protected routes
+//
+// FIXES vs original:
+//  - Expired tokens now return 401 (not 400), so the frontend auto-logout
+//    in AuthContext.authFetch() triggers correctly
+//  - Distinguishes between "no token", "expired token", and "invalid token"
+//    for clearer client-side error handling
+
 const jwt = require('jsonwebtoken');
 
-// Middleware to authenticate user and verify JWT
 const authenticateUser = (req, res, next) => {
-  // Get the token from the Authorization header
-  const token = req.header('Authorization')?.replace('Bearer ', '');
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : null;
 
   if (!token) {
     return res.status(401).json({ message: 'Access denied. No token provided.' });
   }
 
   try {
-    // Verify the token using the secret key
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // Attach decoded user info to the request object
-
-    // Optionally: Check for roles or permissions (if needed)
-    // Example: if (req.user.role !== 'admin') { return res.status(403).json({ message: 'Access forbidden.' }); }
-
-    next(); // Proceed to next middleware or route handler
+    req.user = decoded;
+    next();
   } catch (error) {
-    return res.status(400).json({ message: 'Invalid token.' });
+    if (error.name === 'TokenExpiredError') {
+      // 401 so the frontend knows to attempt a token refresh
+      return res.status(401).json({ message: 'Token expired.', expired: true });
+    }
+    // Any other JWT error (malformed, wrong secret, etc.)
+    return res.status(401).json({ message: 'Invalid token.' });
   }
 };
 
