@@ -1,42 +1,63 @@
 // frontend/src/pages/ForgotPassword.jsx
 
 import { useState } from "react";
-import API_URL from "../api";
+import { useAuth } from "../context/AuthContext";
 
 export default function ForgotPassword({ onBack }) {
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { forgotPassword } = useAuth();
+
+  const [email, setEmail]       = useState("");
+  const [loading, setLoading]   = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]       = useState("");
+
+  // Resend tracking — max 3 attempts
+  const [resendCount, setResendCount]   = useState(1); // first send counts as 1
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendStatus, setResendStatus] = useState("");
+
+  const MAX_SENDS = 3;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        // 404 = no account with that email
-        // 400 = account not verified yet
-        setError(data.message || "Something went wrong. Please try again.");
-        return;
-      }
-
+      await forgotPassword(email);
       setSubmitted(true);
-    } catch {
-      setError("Network error. Please check your connection and try again.");
+      setResendCount(1);
+    } catch (err) {
+      // Backend returns specific messages for unknown email / unverified account
+      setError(err.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleResend = async () => {
+    if (resendCount >= MAX_SENDS) return;
+    setResendLoading(true);
+    setResendStatus("");
+    try {
+      await forgotPassword(email);
+      const newCount = resendCount + 1;
+      setResendCount(newCount);
+      const remaining = MAX_SENDS - newCount;
+      setResendStatus(
+        remaining > 0
+          ? `Reset link resent! (${remaining} resend${remaining !== 1 ? "s" : ""} remaining)`
+          : "Reset link resent! No more resends available."
+      );
+    } catch (err) {
+      setResendStatus(err.message || "Failed to resend. Please try again.");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // ── Success / inbox check screen ──────────────────────────────────────────
   if (submitted) {
+    const resendsLeft = MAX_SENDS - resendCount;
     return (
       <div className="auth-screen">
         <div className="auth-glow" />
@@ -46,14 +67,44 @@ export default function ForgotPassword({ onBack }) {
             <h2 className="auth-title">Check your inbox</h2>
             <p className="auth-subtitle">Password reset instructions sent</p>
           </div>
+
           <div style={{ padding: "8px 0 24px" }}>
             <div className="alert alert-success" style={{ marginBottom: 20 }}>
               A password reset link has been sent to <strong>{email}</strong>.
             </div>
-            <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 24, lineHeight: 1.7 }}>
+
+            <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 20, lineHeight: 1.7 }}>
               The link expires in <strong style={{ color: "var(--text)" }}>1 hour</strong>.
-              Check your spam folder if you don't see the email shortly.
+              Check your spam folder if you don't see it within a few minutes.
             </p>
+
+            {resendStatus && (
+              <p style={{
+                fontSize: 13, marginBottom: 14,
+                color: resendStatus.toLowerCase().includes("failed") ? "var(--error)" : "var(--success)"
+              }}>
+                {resendStatus}
+              </p>
+            )}
+
+            {resendsLeft > 0 ? (
+              <button
+                className="btn btn-secondary btn-full"
+                onClick={handleResend}
+                disabled={resendLoading}
+                style={{ marginBottom: 12 }}
+              >
+                {resendLoading
+                  ? <span className="spinner" />
+                  : `Resend reset link (${resendsLeft} left)`
+                }
+              </button>
+            ) : (
+              <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 12, textAlign: "center" }}>
+                Maximum resends reached. Check your spam folder or contact support.
+              </p>
+            )}
+
             <button className="btn btn-primary btn-full" onClick={onBack}>
               Back to Login
             </button>
@@ -63,6 +114,7 @@ export default function ForgotPassword({ onBack }) {
     );
   }
 
+  // ── Request form ──────────────────────────────────────────────────────────
   return (
     <div className="auth-screen">
       <div className="auth-glow" />
@@ -77,8 +129,7 @@ export default function ForgotPassword({ onBack }) {
           <h2 className="form-title">Forgot Password</h2>
 
           <p style={{ fontSize: 14, color: "var(--text-2)", marginBottom: 20, lineHeight: 1.7 }}>
-            Enter the email address associated with your account and we'll send you
-            a link to reset your password.
+            Enter your account email and we'll send you a reset link.
           </p>
 
           {error && <div className="alert alert-error">{error}</div>}
@@ -90,7 +141,7 @@ export default function ForgotPassword({ onBack }) {
               type="email"
               placeholder="your@email.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
               required
             />
           </div>
