@@ -1,11 +1,6 @@
 // frontend/src/pages/VerifyEmail.jsx
-// Landing page for the verification link sent in the registration email.
-// URL: /verify-email?token=<hex>
-// Calls GET /api/auth/verify-email/:token on mount and shows the result.
-
 import { useEffect, useState } from "react";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import API_URL from "../api";
 
 export default function VerifyEmail({ token }) {
   const [status, setStatus] = useState("loading"); // loading | success | error | already

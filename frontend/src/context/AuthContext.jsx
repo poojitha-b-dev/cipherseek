@@ -1,8 +1,8 @@
 // frontend/src/context/AuthContext.jsx
 
 import { createContext, useContext, useState, useCallback, useRef } from "react";
+import API_URL from "../api";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const AuthContext = createContext(null);
 
 function isTokenExpired(token) {
@@ -62,8 +62,7 @@ export function AuthProvider({ children }) {
     accessTokenRef.current = accessToken;
     localStorage.setItem("ppse_user", JSON.stringify(userData));
     localStorage.setItem("ppse_refresh_token", refreshToken);
-    // Remove old key if present
-    localStorage.removeItem("ppse_token");
+    localStorage.removeItem("ppse_token"); // Remove old key if present
     setUser(userData);
     setIsAuthenticated(true);
   }, []);
@@ -108,7 +107,6 @@ export function AuthProvider({ children }) {
     });
     const data = await res.json();
     if (!res.ok) {
-      // Attach the raw response fields so Login.jsx can read needsVerification
       const err = new Error(data.message || "Login failed");
       err.needsVerification = data.needsVerification || false;
       err.email = data.email || email;

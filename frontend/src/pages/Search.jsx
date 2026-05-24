@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import API_URL from "../api";
+
 export default function Search() {
   const { authFetch } = useAuth();
 
   const [query, setQuery]       = useState("");
-  const [results, setResults]   = useState([]);   // ← now an ARRAY
+  const [results, setResults]   = useState([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
@@ -47,7 +48,6 @@ export default function Search() {
         throw new Error(data.message || "Search failed");
       }
 
-      // Backend now returns { found: N, documents: [...] }
       const data = await res.json();
       setResults(data.documents || []);
       setSearched(true);
@@ -59,7 +59,6 @@ export default function Search() {
     }
   };
 
-  // Download a binary file (PDF, image, etc.)
   const handleDownload = (doc) => {
     const bytes = atob(doc.content);
     const arr   = new Uint8Array(bytes.length);
@@ -144,14 +143,12 @@ export default function Search() {
         {searched && !loading && results.length > 0 && (
           <div>
 
-            {/* Count badge */}
             <div style={{ marginBottom: "1rem" }}>
               <span className="badge badge-match" style={{ fontSize: "0.95rem", padding: "0.4rem 1rem" }}>
                 {results.length} document{results.length > 1 ? "s" : ""} found for &quot;{query}&quot;
               </span>
             </div>
 
-            {/* One card per document */}
             {results.map((doc) => (
               <div className="doc-card" key={doc.id} style={{ marginBottom: "1.25rem" }}>
 
@@ -172,14 +169,12 @@ export default function Search() {
                   <span className="badge badge-match">Match</span>
                 </div>
 
-                {/* Show text inline */}
                 {doc.format === "text" && (
                   <pre className="decrypted-content" style={{ marginTop: "0.75rem" }}>
                     {doc.content}
                   </pre>
                 )}
 
-                {/* Binary — download button */}
                 {doc.format !== "text" && (
                   <div style={{ marginTop: "0.75rem" }}>
                     <button className="btn btn-primary" onClick={() => handleDownload(doc)}>

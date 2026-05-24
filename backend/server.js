@@ -11,14 +11,39 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Trust Railway's reverse proxy so rate limiter sees real client IPs
-// (Without this, all requests appear to come from the same proxy IP)
 app.set('trust proxy', 1);
 
-// ── Middleware ──────────────────────────────────────────────────────
+// ── CORS ────────────────────────────────────────────────────────────
+// List every frontend origin that is allowed to call this API.
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',                 // local dev
+  process.env.FRONTEND_URL,               // set this in Railway env vars
+].filter(Boolean);                        // remove undefined if env var not set
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Postman, curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    // Allow any exact match from the list above
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow ALL Vercel preview deployments automatically
+    // (covers your-app-git-branch-name.vercel.app URLs)
+    if (/\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// ── Middleware ──────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 
 // ── Routes ─────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import API_URL from "../api";
+
 export default function Upload() {
   const { authFetch } = useAuth();
   const [mode, setMode] = useState("text");
@@ -166,7 +167,7 @@ export default function Upload() {
             <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
               {loading ? <><span className="spinner" /> Encrypting…</> : "🔒 Encrypt & Store Document"}
             </button>
-            {/* How encryption works info box — from old design */}
+
             <div className="enc-info-box">
               <div className="enc-info-header">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -184,8 +185,6 @@ export default function Upload() {
               <div className="enc-item"><span className="enc-dot" /><span>Keyword hashed with SHA-256</span></div>
               <div className="enc-item"><span className="enc-dot" /><span>Stored securely in MySQL</span></div>
             </div>
-
-            
           </form>
         </div>
 
@@ -208,7 +207,6 @@ export default function Upload() {
             ))}
           </div>
 
-          {/* Feature badges — from old design */}
           <div className="info-badges">
             <div className="info-badge">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

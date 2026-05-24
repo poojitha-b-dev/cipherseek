@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import heroBg from "../assets/hero-bg.png";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import API_URL from "../api";
+
 const cryptoBadges = [
   { label: "AES-256", icon: "🔒", cls: "cbadge-aes" },
   { label: "ECC", icon: "🔐", cls: "cbadge-rsa" },
@@ -25,7 +26,6 @@ export default function Dashboard({ setPage }) {
   useEffect(() => {
     async function fetchDocs() {
       try {
-        // After
         const res = await authFetch(`${API_URL}/api/documents`);
         const data = await res.json();
         setDocs(Array.isArray(data) ? data : data.documents || []);
@@ -51,7 +51,6 @@ export default function Dashboard({ setPage }) {
         <div className="hero-overlay" />
 
         <div className="hero-inner">
-
           <div className="hero-center">
 
             <h1 className="db-main-title">
@@ -77,14 +76,12 @@ export default function Dashboard({ setPage }) {
               <button className="db-action-btn upload" onClick={() => setPage("upload")}>
                 📤 Upload
               </button>
-
               <button className="db-action-btn search" onClick={() => setPage("search")}>
                 🔍 Search
               </button>
             </div>
 
           </div>
-
         </div>
       </div>
 
