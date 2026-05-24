@@ -1,11 +1,9 @@
 // frontend/src/pages/ForgotPassword.jsx
-// Accessible via: Login page → "Forgot password?" link, OR /forgot-password URL
 
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import API_URL from "../api";
 
 export default function ForgotPassword({ onBack }) {
-  const { forgotPassword } = useAuth();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -16,10 +14,23 @@ export default function ForgotPassword({ onBack }) {
     setError("");
     setLoading(true);
     try {
-      await forgotPassword(email);
-      setSubmitted(true); // Always show success (server hides whether email exists)
-    } catch (err) {
-      setError(err.message);
+      const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        // 404 = no account with that email
+        // 400 = account not verified yet
+        setError(data.message || "Something went wrong. Please try again.");
+        return;
+      }
+
+      setSubmitted(true);
+    } catch {
+      setError("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -37,7 +48,7 @@ export default function ForgotPassword({ onBack }) {
           </div>
           <div style={{ padding: "8px 0 24px" }}>
             <div className="alert alert-success" style={{ marginBottom: 20 }}>
-              If an account with <strong>{email}</strong> exists, a password reset link has been sent.
+              A password reset link has been sent to <strong>{email}</strong>.
             </div>
             <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 24, lineHeight: 1.7 }}>
               The link expires in <strong style={{ color: "var(--text)" }}>1 hour</strong>.

@@ -4,7 +4,6 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const https = require('https');
 const connection = require('../config/db');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/mailer');
 const { authenticateUser } = require('../middleware/authMiddleware');
@@ -33,15 +32,10 @@ function signRefreshToken(userId) {
   return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
 }
 
-/**
- * Check whether an email address has a valid MX record (i.e. the domain
- * actually receives email). This is a lightweight DNS check — it does NOT
- * guarantee the mailbox exists, but it will catch fake domains like
- * "user@notarealdomain123.com" or typos like "user@gmai.com".
- *
- * For Gmail specifically we also do a quick HEAD request to the Google
- * accounts API to see if the address is associated with a Google account.
- */
+// Lightweight DNS check — does the domain accept email at all?
+// Removed checkGmailExists() — it was calling an unreliable Google
+// internal API that returned false for real Gmail accounts, blocking
+// legitimate users from ever registering.
 function checkMxRecord(domain) {
   return new Promise((resolve) => {
     const dns = require('dns');
@@ -52,26 +46,6 @@ function checkMxRecord(domain) {
         resolve(true);
       }
     });
-  });
-}
-
-/**
- * For Gmail addresses: hit the Google account-lookup endpoint.
- * Returns true if Google confirms the account exists, false otherwise.
- * Falls back to true (don't block) on network error so we never
- * accidentally block a valid user due to a transient failure.
- */
-function checkGmailExists(email) {
-  return new Promise((resolve) => {
-    const url = `https://mail.google.com/mail/gxlu?email=${encodeURIComponent(email)}`;
-    const req = https.request(url, { method: 'HEAD', timeout: 4000 }, (res) => {
-      // Google returns Set-Cookie header only when the account exists
-      const cookies = res.headers['set-cookie'];
-      resolve(Array.isArray(cookies) && cookies.length > 0);
-    });
-    req.on('error', () => resolve(true));   // network error → don't block
-    req.on('timeout', () => { req.destroy(); resolve(true); });
-    req.end();
   });
 }
 
@@ -91,25 +65,13 @@ router.post('/register', authLimiter, async (req, res) => {
     return res.status(400).json({ message: 'Please enter a valid email address.' });
   }
 
-  // ── Domain / mailbox existence check ────────────────────────────
+  // Domain existence check (MX record only — no per-mailbox checks)
   const domain = emailLower.split('@')[1];
-
   const hasMx = await checkMxRecord(domain);
   if (!hasMx) {
     return res.status(400).json({
       message: `The domain "${domain}" does not appear to accept email. Please use a real email address.`,
     });
-  }
-
-  // For Gmail specifically, verify the account exists
-  const isGmail = domain === 'gmail.com';
-  if (isGmail) {
-    const gmailExists = await checkGmailExists(emailLower);
-    if (!gmailExists) {
-      return res.status(400).json({
-        message: `No Gmail account found with that address. Please double-check your email.`,
-      });
-    }
   }
 
   try {
@@ -120,9 +82,13 @@ router.post('/register', authLimiter, async (req, res) => {
 
     if (existing.length > 0) {
       if (existing[0].email === emailLower) {
-        return res.status(400).json({ message: 'An account with this email already exists. Try logging in instead.' });
+        return res.status(400).json({
+          message: 'An account with this email already exists. Try logging in instead.',
+        });
       }
-      return res.status(400).json({ message: 'That username is already taken. Please choose a different one.' });
+      return res.status(400).json({
+        message: 'That username is already taken. Please choose a different one.',
+      });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -135,11 +101,10 @@ router.post('/register', authLimiter, async (req, res) => {
       [username, emailLower, passwordHash, verificationToken, verificationExpires]
     );
 
-    try {
-      await sendVerificationEmail(emailLower, username, verificationToken);
-    } catch (mailErr) {
+    // Send email in background — don't await so registration response is instant
+    sendVerificationEmail(emailLower, username, verificationToken).catch((mailErr) => {
       console.error('Verification email send failed:', mailErr.message);
-    }
+    });
 
     return res.status(201).json({
       message: 'Account created! Please check your email inbox to verify your account before logging in.',
@@ -169,7 +134,9 @@ router.get('/verify-email/:token', async (req, res) => {
       return res.status(200).json({ message: 'Email already verified. You can log in.' });
     }
     if (new Date() > new Date(user.verification_expires)) {
-      return res.status(400).json({ message: 'Verification link has expired. Please request a new one from the login page.' });
+      return res.status(400).json({
+        message: 'Verification link has expired. Please request a new one from the login page.',
+      });
     }
     await dbQuery(
       'UPDATE users SET email_verified = 1, verification_token = NULL, verification_expires = NULL WHERE id = ?',
@@ -205,11 +172,12 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
       'UPDATE users SET verification_token = ?, verification_expires = ? WHERE id = ?',
       [newToken, newExpiry, user.id]
     );
-    try {
-      await sendVerificationEmail(email, user.username, newToken);
-    } catch (mailErr) {
+
+    // Fire and forget — don't block the response
+    sendVerificationEmail(email, user.username, newToken).catch((mailErr) => {
       console.error('Resend verification email failed:', mailErr.message);
-    }
+    });
+
     return res.status(200).json(generic);
   } catch (err) {
     console.error('Resend verification error:', err);
@@ -231,7 +199,7 @@ router.post('/login', authLimiter, async (req, res) => {
   try {
     const rows = await dbQuery(
       'SELECT id, username, email, password_hash, email_verified FROM users WHERE email = ? LIMIT 1',
-      [email.toLowerCase()]
+      [email.toLowerCase().trim()]
     );
 
     // ── Wrong email ───────────────────────────────────────────────
@@ -351,20 +319,36 @@ router.post('/logout', authenticateUser, async (req, res) => {
 
 // ─────────────────────────────────────────────
 // POST /api/auth/forgot-password
+// Checks DB first — returns specific error if email not found.
+// Sends email in background so response is always instant.
 // ─────────────────────────────────────────────
 router.post('/forgot-password', passwordLimiter, async (req, res) => {
   const { email } = req.body;
-  const generic = { message: 'If an account with that email exists, a password reset link has been sent.' };
-  if (!email) return res.status(200).json(generic);
+
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required.' });
+  }
 
   try {
     const rows = await dbQuery(
       'SELECT id, username, email_verified FROM users WHERE email = ? LIMIT 1',
-      [email.toLowerCase()]
+      [email.toLowerCase().trim()]
     );
-    if (rows.length === 0 || !rows[0].email_verified) {
-      return res.status(200).json(generic);
+
+    // ── Email not in DB → tell the user immediately ───────────────
+    if (rows.length === 0) {
+      return res.status(404).json({
+        message: 'No account found with that email address. Please check and try again.',
+      });
     }
+
+    // ── Account exists but email not verified ─────────────────────
+    if (!rows[0].email_verified) {
+      return res.status(400).json({
+        message: 'This account has not been verified yet. Please verify your email first.',
+      });
+    }
+
     const user = rows[0];
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
@@ -374,12 +358,15 @@ router.post('/forgot-password', passwordLimiter, async (req, res) => {
       'UPDATE users SET reset_token_hash = ?, reset_token_expires = ? WHERE id = ?',
       [resetTokenHash, resetExpiry, user.id]
     );
-    try {
-      await sendPasswordResetEmail(email, user.username, resetToken);
-    } catch (mailErr) {
+
+    // Send email in background — response is instant regardless of SMTP speed
+    sendPasswordResetEmail(email, user.username, resetToken).catch((mailErr) => {
       console.error('Reset email failed:', mailErr.message);
-    }
-    return res.status(200).json(generic);
+    });
+
+    return res.status(200).json({
+      message: 'Password reset link sent! Check your inbox (and spam folder).',
+    });
   } catch (err) {
     console.error('Forgot password error:', err);
     return res.status(500).json({ message: 'Server error.' });
@@ -416,7 +403,9 @@ router.post('/reset-password', passwordLimiter, async (req, res) => {
        refresh_token_hash = NULL, refresh_token_expires = NULL WHERE id = ?`,
       [passwordHash, user.id]
     );
-    return res.status(200).json({ message: 'Password reset successfully. You can now log in with your new password.' });
+    return res.status(200).json({
+      message: 'Password reset successfully. You can now log in with your new password.',
+    });
   } catch (err) {
     console.error('Reset password error:', err);
     return res.status(500).json({ message: 'Server error during password reset.' });

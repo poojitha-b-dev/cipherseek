@@ -1,19 +1,11 @@
 // backend/utils/mailer.js
-// Nodemailer email utility for PPSE
-// Sends: email verification links, password reset links
-//
-// Setup: set these env vars in Railway
-//   MAIL_HOST     e.g. smtp.gmail.com
-//   MAIL_PORT     e.g. 465
-//   MAIL_SECURE   true (for port 465) or false (for port 587)
-//   MAIL_USER     your Gmail address
-//   MAIL_PASS     your Gmail App Password (NOT your account password)
-//   MAIL_FROM     display name + address, e.g. "PPSE Security <you@gmail.com>"
-//   FRONTEND_URL  your Netlify URL, e.g. https://ppse.netlify.app
 
 const nodemailer = require('nodemailer');
 
 // Create transporter once (reused across requests)
+// connectionTimeout: fail fast (10s) instead of hanging for minutes
+// greetingTimeout: how long to wait for server greeting
+// socketTimeout: max time for any single operation
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.MAIL_PORT || '465', 10),
@@ -22,10 +14,13 @@ const transporter = nodemailer.createTransport({
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS,
   },
+  connectionTimeout: 10000,  // 10s — fail fast if SMTP unreachable
+  greetingTimeout: 10000,    // 10s — fail fast if server doesn't respond
+  socketTimeout: 15000,      // 15s — max time per operation
 });
 
 // ── Shared email shell ─────────────────────────────────────────────
-function buildHtmlEmail({ title, preheader, bodyHtml }) {
+function buildHtmlEmail({ title, bodyHtml }) {
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -50,13 +45,13 @@ function buildHtmlEmail({ title, preheader, bodyHtml }) {
     }
     .logo { font-size: 36px; margin-bottom: 8px; }
     .app-name {
-      font-family: 'Space Mono', monospace, monospace;
+      font-family: 'Space Mono', monospace;
       font-size: 18px;
       font-weight: 700;
       color: #6378ff;
       letter-spacing: 3px;
     }
-    .app-tagline { font-size: 12px; color: #8892b0; margin-top: 4px; letter-spacing: 0.5px; }
+    .app-tagline { font-size: 12px; color: #8892b0; margin-top: 4px; }
     .body { padding: 32px 40px; }
     .body h2 { color: #e8eaf6; font-size: 22px; font-weight: 700; margin: 0 0 8px; }
     .body p { color: #8892b0; font-size: 14px; line-height: 1.7; margin: 0 0 20px; }
@@ -73,7 +68,6 @@ function buildHtmlEmail({ title, preheader, bodyHtml }) {
       font-weight: 700;
       border-radius: 10px;
       text-align: center;
-      box-shadow: 0 0 30px rgba(99,120,255,0.35);
     }
     .url-fallback {
       background: #1a2235;
@@ -94,16 +88,11 @@ function buildHtmlEmail({ title, preheader, bodyHtml }) {
       color: #fbbf24;
       margin-bottom: 24px;
     }
-    .footer {
-      padding: 20px 40px;
-      border-top: 1px solid rgba(99,120,255,0.1);
-      text-align: center;
-    }
+    .footer { padding: 20px 40px; border-top: 1px solid rgba(99,120,255,0.1); text-align: center; }
     .footer p { font-size: 12px; color: #4a5568; margin: 0; line-height: 1.6; }
     .badges { display: flex; justify-content: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
     .badge {
-      font-size: 10px;
-      color: #8892b0;
+      font-size: 10px; color: #8892b0;
       background: #1a2235;
       border: 1px solid rgba(99,120,255,0.15);
       border-radius: 20px;
@@ -112,7 +101,6 @@ function buildHtmlEmail({ title, preheader, bodyHtml }) {
   </style>
 </head>
 <body>
-  <!--[if mso]><table width="100%"><tr><td><![endif]-->
   <div class="wrapper">
     <div class="card">
       <div class="header">
@@ -120,9 +108,7 @@ function buildHtmlEmail({ title, preheader, bodyHtml }) {
         <div class="app-name">PPSE</div>
         <div class="app-tagline">Privacy-Preserving Searchable Encryption</div>
       </div>
-      <div class="body">
-        ${bodyHtml}
-      </div>
+      <div class="body">${bodyHtml}</div>
       <div class="footer">
         <p>You received this email because an action was taken on your PPSE account.<br />
         If you did not initiate this, you can safely ignore this email.</p>
@@ -134,7 +120,6 @@ function buildHtmlEmail({ title, preheader, bodyHtml }) {
       </div>
     </div>
   </div>
-  <!--[if mso]></td></tr></table><![endif]-->
 </body>
 </html>`;
 }
@@ -145,7 +130,6 @@ async function sendVerificationEmail(to, username, token) {
 
   const html = buildHtmlEmail({
     title: 'Verify your PPSE email',
-    preheader: 'Click to verify your email address.',
     bodyHtml: `
       <h2>Verify your email</h2>
       <p>Hi <strong style="color:#e8eaf6">${username}</strong>,</p>
@@ -157,8 +141,7 @@ async function sendVerificationEmail(to, username, token) {
       </p>
       <div class="url-fallback">${verifyUrl}</div>
       <div class="warning">
-        ⚠️ If you did not create a PPSE account, no further action is needed —
-        this address will not be used.
+        ⚠️ If you did not create a PPSE account, no further action is needed.
       </div>
     `,
   });
@@ -178,7 +161,6 @@ async function sendPasswordResetEmail(to, username, token) {
 
   const html = buildHtmlEmail({
     title: 'Reset your PPSE password',
-    preheader: 'Reset link expires in 1 hour.',
     bodyHtml: `
       <h2>Reset your password</h2>
       <p>Hi <strong style="color:#e8eaf6">${username}</strong>,</p>
@@ -190,8 +172,7 @@ async function sendPasswordResetEmail(to, username, token) {
       </p>
       <div class="url-fallback">${resetUrl}</div>
       <div class="warning">
-        ⚠️ If you did not request a password reset, your account is safe —
-        ignore this email. The link will expire automatically.
+        ⚠️ If you did not request a password reset, ignore this email. The link expires automatically.
       </div>
     `,
   });
