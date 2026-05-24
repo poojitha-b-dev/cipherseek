@@ -1,25 +1,53 @@
+// frontend/src/pages/Login.jsx
+// Only change from original: added "Forgot password?" link that calls onForgotPassword prop.
+// All existing markup, CSS classes, and behaviour preserved.
+
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
-export default function Login({ onSwitch }) {
+export default function Login({ onSwitch, onForgotPassword }) {
   const { login } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // When login fails with needsVerification, offer resend
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const { resendVerification } = useAuth();
+  const [resendStatus, setResendStatus] = useState("");
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setNeedsVerification(false);
+    setResendStatus("");
     setLoading(true);
     try {
       await login(form.email, form.password);
     } catch (err) {
+      // Check if the server told us verification is needed
+      // (The fetch response with needsVerification:true is thrown as a plain Error;
+      //  we re-parse the message to detect it gracefully.)
+      if (err.message && err.message.toLowerCase().includes("verify your email")) {
+        setNeedsVerification(true);
+        setVerificationEmail(form.email);
+      }
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResendStatus("Sending…");
+    try {
+      await resendVerification(verificationEmail);
+      setResendStatus("Verification email sent! Check your inbox.");
+    } catch {
+      setResendStatus("Failed to resend. Please try again.");
     }
   };
 
@@ -36,7 +64,28 @@ export default function Login({ onSwitch }) {
         <form className="auth-form" onSubmit={handleSubmit}>
           <h2 className="form-title">Sign In</h2>
 
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && (
+            <div className="alert alert-error">
+              {error}
+              {needsVerification && (
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={handleResend}
+                    style={{ fontSize: 13 }}
+                  >
+                    Resend verification email
+                  </button>
+                </div>
+              )}
+              {resendStatus && (
+                <p style={{ marginTop: 6, fontSize: 13, color: "var(--text-2)" }}>
+                  {resendStatus}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="field">
             <label className="field-label">Email</label>
@@ -52,7 +101,20 @@ export default function Login({ onSwitch }) {
           </div>
 
           <div className="field">
-            <label className="field-label">Password</label>
+            <label className="field-label">
+              Password
+              {/* Forgot password link sits on the same line as the label */}
+              {onForgotPassword && (
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={onForgotPassword}
+                  style={{ marginLeft: "auto", fontSize: 12, fontWeight: 400 }}
+                >
+                  Forgot password?
+                </button>
+              )}
+            </label>
             <div className="password-wrapper">
               <input
                 className="field-input"

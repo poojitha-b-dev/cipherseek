@@ -1,3 +1,8 @@
+// frontend/src/pages/Register.jsx
+// Change from original: the success state now shows "Check your inbox" instead of
+// "Account Created — Go to Login", since email verification is now required.
+// Password strength meter and all other UI are unchanged.
+
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
@@ -27,14 +32,16 @@ function validatePassword(password) {
 }
 
 export default function Register({ onSwitch }) {
-  const { register } = useAuth();
+  const { register, resendVerification } = useAuth();
   const [form, setForm] = useState({ username: "", email: "", password: "", confirm: "" });
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState(null); // null = not yet registered
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
+  const [resendStatus, setResendStatus] = useState("");
+  const [resendLoading, setResendLoading] = useState(false);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -58,7 +65,7 @@ export default function Register({ onSwitch }) {
     setLoading(true);
     try {
       await register(form.username, form.email, form.password);
-      setSuccess(true);
+      setRegisteredEmail(form.email); // triggers the "check inbox" screen
     } catch (err) {
       setError(err.message);
     } finally {
@@ -66,24 +73,67 @@ export default function Register({ onSwitch }) {
     }
   };
 
-  if (success) {
+  const handleResend = async () => {
+    setResendLoading(true);
+    setResendStatus("");
+    try {
+      await resendVerification(registeredEmail);
+      setResendStatus("A new verification email has been sent!");
+    } catch {
+      setResendStatus("Failed to resend. Please try again.");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // ── Post-registration: "Check your inbox" screen ─────────────────
+  if (registeredEmail) {
     return (
       <div className="auth-screen">
         <div className="auth-glow" />
         <div className="auth-card">
           <div className="auth-header">
-            <div className="auth-logo">✅</div>
-            <h2 className="auth-title">Account Created!</h2>
-            <p className="auth-subtitle">You can now sign in with your credentials.</p>
+            <div className="auth-logo">📬</div>
+            <h2 className="auth-title">Check your inbox</h2>
+            <p className="auth-subtitle">One more step to activate your account</p>
           </div>
-          <button className="btn btn-primary btn-full" onClick={onSwitch}>
-            Go to Login
-          </button>
+
+          <div style={{ padding: "0 0 24px" }}>
+            <div className="alert alert-success" style={{ marginBottom: 20 }}>
+              We sent a verification link to <strong>{registeredEmail}</strong>.
+              Click the link in that email to activate your account.
+            </div>
+
+            <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 20, lineHeight: 1.7 }}>
+              The link expires in <strong style={{ color: "var(--text)" }}>24 hours</strong>.
+              Check your spam folder if you don't see it within a few minutes.
+            </p>
+
+            {resendStatus && (
+              <p style={{ fontSize: 13, marginBottom: 14, color: "var(--success)" }}>
+                {resendStatus}
+              </p>
+            )}
+
+            <button
+              className="btn btn-secondary btn-full"
+              onClick={handleResend}
+              disabled={resendLoading}
+              style={{ marginBottom: 12 }}
+            >
+              {resendLoading ? <span className="spinner" /> : "Resend verification email"}
+            </button>
+
+            <button className="btn btn-primary btn-full" onClick={onSwitch}>
+              Go to Login
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
+  // ── Registration form (unchanged from original) ───────────────────
   return (
     <div className="auth-screen">
       <div className="auth-glow" />
@@ -160,7 +210,6 @@ export default function Register({ onSwitch }) {
               </button>
             </div>
 
-            {/* Strength Bar */}
             {passwordTouched && form.password.length > 0 && (
               <div className="strength-section">
                 <div className="strength-bar-track">
@@ -172,8 +221,6 @@ export default function Register({ onSwitch }) {
                 <span className="strength-label" style={{ color: strength.color }}>
                   {strength.label}
                 </span>
-
-                {/* Requirements checklist */}
                 {!isPasswordAcceptable && (
                   <div className="password-hints">
                     <p className="hints-title">Your password needs:</p>
@@ -224,7 +271,6 @@ export default function Register({ onSwitch }) {
                 )}
               </button>
             </div>
-            {/* Match indicator */}
             {form.confirm.length > 0 && (
               <p className="confirm-match" style={{ color: form.password === form.confirm ? "#1d9e75" : "#e24b4a" }}>
                 {form.password === form.confirm ? "✓ Passwords match" : "✗ Passwords do not match"}
