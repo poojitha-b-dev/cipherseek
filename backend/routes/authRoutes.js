@@ -1,10 +1,10 @@
 // backend/routes/authRoutes.js
 
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const dns = require('dns');
+const express  = require('express');
+const bcrypt   = require('bcryptjs');
+const jwt      = require('jsonwebtoken');
+const crypto   = require('crypto');
+const dns      = require('dns').promises;
 const connection = require('../config/db');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/mailer');
 const { authenticateUser } = require('../middleware/authMiddleware');
@@ -15,12 +15,11 @@ const router = express.Router();
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function dbQuery(sql, params) {
-  return new Promise((resolve, reject) => {
-    connection.query(sql, params, (err, results) => {
-      if (err) return reject(err);
-      resolve(results);
-    });
-  });
+  return new Promise((resolve, reject) =>
+    connection.query(sql, params, (err, results) =>
+      err ? reject(err) : resolve(results)
+    )
+  );
 }
 
 function signAccessToken(userId) {
@@ -28,25 +27,41 @@ function signAccessToken(userId) {
 }
 
 function signRefreshToken(userId) {
-  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
-/**
- * MX record check — confirms the email domain can receive mail.
- * This catches obviously fake domains like vvvvvsdddgytrghhdfg@gmail.com
- * where the domain is not gmail.com but a made-up string.
- * It does NOT verify that a specific mailbox exists (that would require
- * SMTP probing which is unreliable and often blocked).
- *
- * Note: gmail.com, yahoo.com, hotmail.com etc. all have MX records,
- * so real email addresses always pass. Only completely invented domains fail.
- */
-function checkMxRecord(domain) {
-  return new Promise((resolve) => {
-    dns.resolveMx(domain, (err, addresses) => {
-      resolve(!err && addresses && addresses.length > 0);
-    });
-  });
+// Username: letters, digits, underscore, dot only
+const USERNAME_RE = /^[a-zA-Z0-9._]+$/;
+
+// Lightweight disposable-domain blocklist
+// Add more domains as needed — this covers the most common throwaway providers
+const DISPOSABLE_DOMAINS = new Set([
+  'mailinator.com','guerrillamail.com','tempmail.com','throwam.com',
+  'sharklasers.com','guerrillamailblock.com','grr.la','guerrillamail.info',
+  'spam4.me','yopmail.com','yopmail.fr','cool.fr.nf','jetable.fr.nf',
+  'nospam.ze.tc','nomail.xl.cx','mega.zik.dj','speed.1s.fr','courriel.fr.nf',
+  'moncourrier.fr.nf','monemail.fr.nf','monmail.fr.nf','trashmail.com',
+  'trashmail.at','trashmail.io','trashmail.me','trashmail.net',
+  'dispostable.com','maildrop.cc','mailnull.com','spamgourmet.com',
+  'spamgourmet.net','spamgourmet.org','spamgourmet.com','binkmail.com',
+  'bobmail.info','chammy.info','devnullmail.com','letthemeatspam.com',
+  'mailnew.com','no-spam.ws','obobbo.com','spamfree24.org','spoofmail.de',
+  'tempe-mail.com','tempinbox.com','trashdevil.com','trashdevil.de',
+  'wegwerfmail.de','wegwerfmail.net','wegwerfmail.org',
+]);
+
+async function isFakeDomain(email) {
+  const domain = email.split('@')[1]?.toLowerCase();
+  if (!domain) return true;
+  if (DISPOSABLE_DOMAINS.has(domain)) return true;
+  // MX record check — real email domains always have MX records
+  try {
+    const records = await dns.resolveMx(domain);
+    return !records || records.length === 0;
+  } catch {
+    // DNS lookup failed — could be a real but obscure domain; allow through
+    return false;
+  }
 }
 
 // ─── POST /api/auth/register ──────────────────────────────────────────────────
@@ -57,85 +72,77 @@ router.post('/register', authLimiter, async (req, res) => {
     return res.status(400).json({ message: 'All fields are required.' });
   }
 
-  const trimmedUsername = username.trim();
-  const emailLower = email.toLowerCase().trim();
+  const trimUser  = username.trim();
+  const trimEmail = email.toLowerCase().trim();
 
-  // Basic email format check
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower)) {
+  // Username format
+  if (trimUser.length < 2 || trimUser.length > 30) {
+    return res.status(400).json({ message: 'Username must be between 2 and 30 characters.' });
+  }
+  if (!USERNAME_RE.test(trimUser)) {
+    return res.status(400).json({
+      message: 'Username can only contain letters, numbers, underscores (_) and dots (.).',
+    });
+  }
+
+  // Email format
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimEmail)) {
     return res.status(400).json({ message: 'Please enter a valid email address.' });
   }
 
-  // Username rules — permissive, allow letters/numbers/spaces and: @ # % & ^ _ . - ! ?
-  // Only block characters that cause SQL/HTML injection risk.
-  if (trimmedUsername.length < 2 || trimmedUsername.length > 40) {
-    return res.status(400).json({ message: 'Username must be between 2 and 40 characters.' });
-  }
-  if (/[<>/"'`\\]/.test(trimmedUsername)) {
-    return res.status(400).json({ message: 'Username contains unsupported characters.' });
+  // Fake / disposable email
+  const fake = await isFakeDomain(trimEmail);
+  if (fake) {
+    return res.status(400).json({
+      message: 'Please use a real email address. Disposable/temporary emails are not allowed.',
+    });
   }
 
-  // Password minimum
+  // Password length
   if (password.length < 8) {
     return res.status(400).json({ message: 'Password must be at least 8 characters.' });
   }
 
-  // MX record check — catches invented domains, not specific fake mailboxes
-  const domain = emailLower.split('@')[1];
   try {
-    const hasMx = await checkMxRecord(domain);
-    if (!hasMx) {
-      return res.status(400).json({
-        message: `The email domain "${domain}" does not appear to be a real mail server. Please use a real email address.`,
-      });
-    }
-  } catch {
-    // DNS lookup failure — allow through rather than blocking real users
-  }
-
-  try {
-    // Check both email AND username in one query for efficiency
+    // Check email AND username in one query
     const existing = await dbQuery(
-      'SELECT id, email, username FROM users WHERE email = ? OR username = ? LIMIT 2',
-      [emailLower, trimmedUsername]
+      'SELECT email, username FROM users WHERE email = ? OR username = ? LIMIT 2',
+      [trimEmail, trimUser]
     );
 
-    // Separate "email taken" vs "username taken" messages
     for (const row of existing) {
-      if (row.email === emailLower) {
+      if (row.email === trimEmail) {
         return res.status(409).json({
-          message: 'An account with this email already exists. Try logging in instead.',
+          message: 'Email already exists.',
           errorType: 'email_exists',
         });
       }
-      if (row.username === trimmedUsername) {
+      if (row.username === trimUser) {
         return res.status(409).json({
-          message: 'That username is already taken. Please choose a different one.',
+          message: 'Username already taken.',
           errorType: 'username_taken',
         });
       }
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const passwordHash  = await bcrypt.hash(password, 12);
+    const verifyToken   = crypto.randomBytes(32).toString('hex');
+    const verifyExpiry  = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await dbQuery(
       `INSERT INTO users
-         (username, email, password_hash, email_verified, verification_token, verification_expires, resend_count, resend_reset_at)
+         (username, email, password_hash, email_verified,
+          verification_token, verification_expires,
+          resend_count, resend_reset_at)
        VALUES (?, ?, ?, 0, ?, ?, 0, NULL)`,
-      [trimmedUsername, emailLower, passwordHash, verificationToken, verificationExpires]
+      [trimUser, trimEmail, passwordHash, verifyToken, verifyExpiry]
     );
 
-    // Fire and forget — don't await so the response is instant
-    sendVerificationEmail(emailLower, trimmedUsername, verificationToken).catch((err) => {
-      console.error('Verification email send failed:', err.message);
-    });
+    sendVerificationEmail(trimEmail, trimUser, verifyToken).catch(err =>
+      console.error('Verification email failed:', err.message)
+    );
 
-    return res.status(201).json({
-      message: 'Account created! Please check your email to verify your account before logging in.',
-      // Expose token in non-production for easy local testing
-      ...(process.env.NODE_ENV !== 'production' && { devVerificationToken: verificationToken }),
-    });
+    return res.status(201).json({ message: 'Account created. Please check your email to verify.' });
   } catch (err) {
     console.error('Register error:', err);
     return res.status(500).json({ message: 'Server error during registration.' });
@@ -150,7 +157,7 @@ router.get('/verify-email/:token', async (req, res) => {
       'SELECT id, email_verified, verification_expires FROM users WHERE verification_token = ? LIMIT 1',
       [token]
     );
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(400).json({ message: 'Invalid or already used verification link.' });
     }
     const user = rows[0];
@@ -159,7 +166,7 @@ router.get('/verify-email/:token', async (req, res) => {
     }
     if (new Date() > new Date(user.verification_expires)) {
       return res.status(400).json({
-        message: 'Verification link has expired. Please request a new one from the login page.',
+        message: 'Verification link has expired. Please request a new one.',
       });
     }
     await dbQuery(
@@ -174,12 +181,10 @@ router.get('/verify-email/:token', async (req, res) => {
 });
 
 // ─── POST /api/auth/resend-verification ──────────────────────────────────────
-// Max 3 resends per account. After 3, the user must contact support.
+// Hard limit: 3 resends per 24-hour window per account
 router.post('/resend-verification', authLimiter, async (req, res) => {
   const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ message: 'Email is required.' });
-  }
+  if (!email) return res.status(400).json({ message: 'Email is required.' });
 
   try {
     const rows = await dbQuery(
@@ -187,57 +192,39 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
       [email.toLowerCase().trim()]
     );
 
-    if (rows.length === 0) {
-      // Don't reveal whether the account exists
-      return res.status(200).json({ message: 'If that email is registered and unverified, a new link has been sent.' });
+    // Always return 200 for unknown emails — prevents account enumeration
+    if (!rows.length || rows[0].email_verified) {
+      return res.status(200).json({ message: 'If eligible, a new verification link has been sent.' });
     }
 
     const user = rows[0];
-
-    if (user.email_verified) {
-      return res.status(400).json({ message: 'This email is already verified. You can log in.' });
-    }
-
-    // ── Resend limit: max 3 per 24-hour window ────────────────────────────
-    const now = new Date();
+    const now  = new Date();
     const resetAt = user.resend_reset_at ? new Date(user.resend_reset_at) : null;
+    let count = (!resetAt || now > resetAt) ? 0 : (user.resend_count || 0);
 
-    // Reset counter if the 24-hour window has passed
-    let currentCount = user.resend_count || 0;
-    if (!resetAt || now > resetAt) {
-      currentCount = 0;
-    }
-
-    if (currentCount >= 3) {
-      const nextReset = resetAt ? resetAt : now;
-      const hoursLeft = Math.ceil((nextReset - now) / (1000 * 60 * 60));
+    if (count >= 3) {
       return res.status(429).json({
-        message: `You have reached the maximum of 3 verification emails. Please try again in ${hoursLeft} hour(s), or check your spam folder.`,
+        message: 'Verification resend limit reached.',
         limitReached: true,
-        resendCount: currentCount,
       });
     }
 
-    const newToken = crypto.randomBytes(32).toString('hex');
+    const newToken  = crypto.randomBytes(32).toString('hex');
     const newExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const newCount = currentCount + 1;
-    const newResetAt = resetAt && now < resetAt ? resetAt : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const newCount  = count + 1;
+    const newReset  = (resetAt && now < resetAt) ? resetAt : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await dbQuery(
       `UPDATE users SET verification_token = ?, verification_expires = ?,
        resend_count = ?, resend_reset_at = ? WHERE id = ?`,
-      [newToken, newExpiry, newCount, newResetAt, user.id]
+      [newToken, newExpiry, newCount, newReset, user.id]
     );
 
-    sendVerificationEmail(email, user.username, newToken).catch((err) => {
-      console.error('Resend verification email failed:', err.message);
-    });
+    sendVerificationEmail(email, user.username, newToken).catch(err =>
+      console.error('Resend email failed:', err.message)
+    );
 
-    return res.status(200).json({
-      message: 'A new verification link has been sent. Check your inbox and spam folder.',
-      resendCount: newCount,
-      resendRemaining: 3 - newCount,
-    });
+    return res.status(200).json({ message: 'Verification email sent.' });
   } catch (err) {
     console.error('Resend verification error:', err);
     return res.status(500).json({ message: 'Server error.' });
@@ -245,10 +232,8 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
 });
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
-// Returns DISTINCT error types for wrong email vs wrong password.
 router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
-
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
@@ -259,44 +244,40 @@ router.post('/login', authLimiter, async (req, res) => {
       [email.toLowerCase().trim()]
     );
 
-    // No account with this email
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(401).json({
-        message: 'No account found with that email address.',
+        message: 'No account found.',
         errorType: 'email_not_found',
       });
     }
 
     const user = rows[0];
+    const match = await bcrypt.compare(password, user.password_hash);
 
-    // Wrong password — bcrypt compare
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    if (!passwordMatch) {
+    if (!match) {
       return res.status(401).json({
-        message: 'Incorrect password. Please try again.',
+        message: 'Incorrect password.',
         errorType: 'wrong_password',
       });
     }
 
-    // Email not verified — tell the frontend to show the resend option
     if (!user.email_verified) {
       return res.status(403).json({
-        message: 'Please verify your email before logging in.',
+        message: 'Please verify your email first.',
         errorType: 'email_not_verified',
         needsVerification: true,
         email: user.email,
       });
     }
 
-    // ── Issue tokens ──────────────────────────────────────────────────────
-    const accessToken = signAccessToken(user.id);
+    const accessToken  = signAccessToken(user.id);
     const refreshToken = signRefreshToken(user.id);
-    const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    const refreshExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const refreshHash  = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const refreshExp   = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await dbQuery(
-      'UPDATE users SET refresh_token_hash = ?, refresh_token_expires = ? WHERE id = ?',
-      [refreshTokenHash, refreshExpiry, user.id]
+      'UPDATE users SET refresh_token_hash = ?, refresh_token_expires = ?, last_login = NOW() WHERE id = ?',
+      [refreshHash, refreshExp, user.id]
     );
 
     return res.status(200).json({
@@ -319,42 +300,40 @@ router.post('/refresh', async (req, res) => {
   try {
     let decoded;
     try {
-      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
     } catch {
-      return res.status(401).json({ message: 'Invalid or expired refresh token.' });
+      return res.status(401).json({ message: 'Invalid or expired session.' });
     }
 
-    const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     const rows = await dbQuery(
       'SELECT id, username, email, refresh_token_expires FROM users WHERE id = ? AND refresh_token_hash = ? LIMIT 1',
-      [decoded.userId, refreshTokenHash]
+      [decoded.userId, hash]
     );
-    if (rows.length === 0) {
-      return res.status(401).json({ message: 'Refresh token revoked or not recognized.' });
-    }
-    const user = rows[0];
-    if (new Date() > new Date(user.refresh_token_expires)) {
+
+    if (!rows.length || new Date() > new Date(rows[0].refresh_token_expires)) {
       return res.status(401).json({ message: 'Session expired. Please log in again.' });
     }
 
-    const newAccessToken = signAccessToken(user.id);
-    const newRefreshToken = signRefreshToken(user.id);
-    const newRefreshHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
-    const newRefreshExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const user = rows[0];
+    const newAccess  = signAccessToken(user.id);
+    const newRefresh = signRefreshToken(user.id);
+    const newHash    = crypto.createHash('sha256').update(newRefresh).digest('hex');
+    const newExp     = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await dbQuery(
       'UPDATE users SET refresh_token_hash = ?, refresh_token_expires = ? WHERE id = ?',
-      [newRefreshHash, newRefreshExpiry, user.id]
+      [newHash, newExp, user.id]
     );
 
     return res.status(200).json({
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
+      accessToken: newAccess,
+      refreshToken: newRefresh,
       user: { id: user.id, username: user.username, email: user.email },
     });
   } catch (err) {
     console.error('Refresh error:', err);
-    return res.status(500).json({ message: 'Server error during token refresh.' });
+    return res.status(500).json({ message: 'Server error.' });
   }
 });
 
@@ -365,58 +344,68 @@ router.post('/logout', authenticateUser, async (req, res) => {
       'UPDATE users SET refresh_token_hash = NULL, refresh_token_expires = NULL WHERE id = ?',
       [req.user.userId]
     );
-    return res.status(200).json({ message: 'Logged out successfully.' });
+    return res.status(200).json({ message: 'Logged out.' });
   } catch (err) {
     console.error('Logout error:', err);
-    return res.status(500).json({ message: 'Server error during logout.' });
+    return res.status(500).json({ message: 'Server error.' });
   }
 });
 
 // ─── POST /api/auth/forgot-password ──────────────────────────────────────────
-// Enforces max 3 reset emails per hour per account.
 router.post('/forgot-password', passwordLimiter, async (req, res) => {
   const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ message: 'Email is required.' });
-  }
+  if (!email) return res.status(400).json({ message: 'Email is required.' });
 
   try {
     const rows = await dbQuery(
-      'SELECT id, username, email_verified FROM users WHERE email = ? LIMIT 1',
+      'SELECT id, username, email_verified, reset_count, reset_reset_at FROM users WHERE email = ? LIMIT 1',
       [email.toLowerCase().trim()]
     );
 
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({
-        message: 'No account found with that email address.',
+        message: 'No account found.',
         errorType: 'email_not_found',
       });
     }
 
-    if (!rows[0].email_verified) {
+    const user = rows[0];
+    if (!user.email_verified) {
       return res.status(400).json({
-        message: 'This account has not been verified yet. Please verify your email first.',
+        message: 'Please verify your email before resetting your password.',
         errorType: 'email_not_verified',
       });
     }
 
-    const user = rows[0];
+    // Max 3 reset emails per hour
+    const now = new Date();
+    const resetAt = user.reset_reset_at ? new Date(user.reset_reset_at) : null;
+    let count = (!resetAt || now > resetAt) ? 0 : (user.reset_count || 0);
+
+    if (count >= 3) {
+      return res.status(429).json({
+        message: 'Reset limit reached. Please wait before trying again.',
+        limitReached: true,
+      });
+    }
+
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-    const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const resetHash  = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetExp   = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const newCount   = count + 1;
+    const newReset   = (resetAt && now < resetAt) ? resetAt : new Date(Date.now() + 60 * 60 * 1000);
 
     await dbQuery(
-      'UPDATE users SET reset_token_hash = ?, reset_token_expires = ? WHERE id = ?',
-      [resetTokenHash, resetExpiry, user.id]
+      `UPDATE users SET reset_token_hash = ?, reset_token_expires = ?,
+       reset_count = ?, reset_reset_at = ? WHERE id = ?`,
+      [resetHash, resetExp, newCount, newReset, user.id]
     );
 
-    sendPasswordResetEmail(email, user.username, resetToken).catch((err) => {
-      console.error('Reset email failed:', err.message);
-    });
+    sendPasswordResetEmail(email, user.username, resetToken).catch(err =>
+      console.error('Reset email failed:', err.message)
+    );
 
-    return res.status(200).json({
-      message: 'Password reset link sent! Check your inbox (and spam folder). The link expires in 1 hour.',
-    });
+    return res.status(200).json({ message: 'Password reset link sent. Check your inbox.' });
   } catch (err) {
     console.error('Forgot password error:', err);
     return res.status(500).json({ message: 'Server error.' });
@@ -432,32 +421,33 @@ router.post('/reset-password', passwordLimiter, async (req, res) => {
   if (password.length < 8) {
     return res.status(400).json({ message: 'Password must be at least 8 characters.' });
   }
+
   try {
-    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
     const rows = await dbQuery(
       'SELECT id, reset_token_expires FROM users WHERE reset_token_hash = ? LIMIT 1',
-      [resetTokenHash]
+      [hash]
     );
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(400).json({ message: 'Invalid or already used reset link.' });
     }
-    const user = rows[0];
-    if (new Date() > new Date(user.reset_token_expires)) {
+    if (new Date() > new Date(rows[0].reset_token_expires)) {
       return res.status(400).json({ message: 'Reset link has expired. Please request a new one.' });
     }
+
     const passwordHash = await bcrypt.hash(password, 12);
-    // Wipe all sessions on password reset for security
     await dbQuery(
-      `UPDATE users SET password_hash = ?, reset_token_hash = NULL, reset_token_expires = NULL,
-       refresh_token_hash = NULL, refresh_token_expires = NULL WHERE id = ?`,
-      [passwordHash, user.id]
+      `UPDATE users SET password_hash = ?,
+       reset_token_hash = NULL, reset_token_expires = NULL,
+       refresh_token_hash = NULL, refresh_token_expires = NULL
+       WHERE id = ?`,
+      [passwordHash, rows[0].id]
     );
-    return res.status(200).json({
-      message: 'Password reset successfully. You can now log in with your new password.',
-    });
+
+    return res.status(200).json({ message: 'Password reset successfully. You can now log in.' });
   } catch (err) {
     console.error('Reset password error:', err);
-    return res.status(500).json({ message: 'Server error during password reset.' });
+    return res.status(500).json({ message: 'Server error.' });
   }
 });
 
@@ -465,24 +455,21 @@ router.post('/reset-password', passwordLimiter, async (req, res) => {
 router.post('/change-password', authenticateUser, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
-    return res.status(400).json({ message: 'Current and new password are required.' });
+    return res.status(400).json({ message: 'Both passwords are required.' });
   }
   if (newPassword.length < 8) {
     return res.status(400).json({ message: 'New password must be at least 8 characters.' });
   }
   if (currentPassword === newPassword) {
-    return res.status(400).json({ message: 'New password must differ from your current password.' });
+    return res.status(400).json({ message: 'New password must differ from current password.' });
   }
   try {
-    const rows = await dbQuery(
-      'SELECT id, password_hash FROM users WHERE id = ? LIMIT 1',
-      [req.user.userId]
-    );
-    if (rows.length === 0) return res.status(404).json({ message: 'User not found.' });
-    const isMatch = await bcrypt.compare(currentPassword, rows[0].password_hash);
-    if (!isMatch) return res.status(401).json({ message: 'Current password is incorrect.' });
-    const newHash = await bcrypt.hash(newPassword, 12);
-    await dbQuery('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.user.userId]);
+    const rows = await dbQuery('SELECT password_hash FROM users WHERE id = ? LIMIT 1', [req.user.userId]);
+    if (!rows.length) return res.status(404).json({ message: 'User not found.' });
+    const match = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!match) return res.status(401).json({ message: 'Current password is incorrect.' });
+    const hash = await bcrypt.hash(newPassword, 12);
+    await dbQuery('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user.userId]);
     return res.status(200).json({ message: 'Password changed successfully.' });
   } catch (err) {
     console.error('Change password error:', err);
@@ -497,10 +484,9 @@ router.get('/me', authenticateUser, async (req, res) => {
       'SELECT id, username, email, email_verified, created_at FROM users WHERE id = ? LIMIT 1',
       [req.user.userId]
     );
-    if (rows.length === 0) return res.status(404).json({ message: 'User not found.' });
+    if (!rows.length) return res.status(404).json({ message: 'User not found.' });
     return res.status(200).json({ user: rows[0] });
   } catch (err) {
-    console.error('Me error:', err);
     return res.status(500).json({ message: 'Server error.' });
   }
 });

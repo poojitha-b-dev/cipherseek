@@ -11,53 +11,49 @@ export default function ForgotPassword({ onBack }) {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError]       = useState("");
 
-  // Resend tracking — max 3 attempts
-  const [resendCount, setResendCount]   = useState(1); // first send counts as 1
+  // Resend: max 3 total (first send + 2 resends)
+  const [sendCount, setSendCount]       = useState(0);
   const [resendLoading, setResendLoading] = useState(false);
-  const [resendStatus, setResendStatus] = useState("");
+  const [resendMsg, setResendMsg]       = useState("");
+  const [limitReached, setLimitReached] = useState(false);
 
-  const MAX_SENDS = 3;
+  const MAX = 3;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
+  const doSend = async (isResend = false) => {
+    if (isResend) setResendLoading(true);
+    else setLoading(true);
+    setError(""); setResendMsg("");
+
     try {
       await forgotPassword(email);
-      setSubmitted(true);
-      setResendCount(1);
+      const next = sendCount + 1;
+      setSendCount(next);
+      if (!isResend) {
+        setSubmitted(true);
+      } else {
+        setResendMsg("Reset link resent! Check your inbox and spam folder.");
+      }
     } catch (err) {
-      // Backend returns specific messages for unknown email / unverified account
-      setError(err.message || "Something went wrong. Please try again.");
+      if (err.limitReached) {
+        setLimitReached(true);
+        setResendMsg("Reset limit reached.");
+      } else if (!isResend) {
+        // Show inline on the form (e.g. "No account found")
+        setError(err.message || "Something went wrong.");
+      } else {
+        setResendMsg(err.message || "Failed to resend. Please try again.");
+      }
     } finally {
-      setLoading(false);
+      if (isResend) setResendLoading(false);
+      else setLoading(false);
     }
   };
 
-  const handleResend = async () => {
-    if (resendCount >= MAX_SENDS) return;
-    setResendLoading(true);
-    setResendStatus("");
-    try {
-      await forgotPassword(email);
-      const newCount = resendCount + 1;
-      setResendCount(newCount);
-      const remaining = MAX_SENDS - newCount;
-      setResendStatus(
-        remaining > 0
-          ? `Reset link resent! (${remaining} resend${remaining !== 1 ? "s" : ""} remaining)`
-          : "Reset link resent! No more resends available."
-      );
-    } catch (err) {
-      setResendStatus(err.message || "Failed to resend. Please try again.");
-    } finally {
-      setResendLoading(false);
-    }
-  };
+  const handleSubmit = (e) => { e.preventDefault(); doSend(false); };
 
-  // ── Success / inbox check screen ──────────────────────────────────────────
+  // ── Success screen ────────────────────────────────────────────────────────
   if (submitted) {
-    const resendsLeft = MAX_SENDS - resendCount;
+    const resendsLeft = MAX - sendCount;
     return (
       <div className="auth-screen">
         <div className="auth-glow" />
@@ -67,42 +63,30 @@ export default function ForgotPassword({ onBack }) {
             <h2 className="auth-title">Check your inbox</h2>
             <p className="auth-subtitle">Password reset instructions sent</p>
           </div>
-
           <div style={{ padding: "8px 0 24px" }}>
             <div className="alert alert-success" style={{ marginBottom: 20 }}>
-              A password reset link has been sent to <strong>{email}</strong>.
+              A reset link has been sent to <strong>{email}</strong>.
             </div>
-
             <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 20, lineHeight: 1.7 }}>
               The link expires in <strong style={{ color: "var(--text)" }}>1 hour</strong>.
-              Check your spam folder if you don't see it within a few minutes.
+              Check your spam folder if you don't see it.
             </p>
 
-            {resendStatus && (
+            {resendMsg && (
               <p style={{
                 fontSize: 13, marginBottom: 14,
-                color: resendStatus.toLowerCase().includes("failed") ? "var(--error)" : "var(--success)"
+                color: limitReached || resendMsg.includes("Failed") ? "var(--error)" : "var(--success)"
               }}>
-                {resendStatus}
+                {resendMsg}
               </p>
             )}
 
-            {resendsLeft > 0 ? (
-              <button
-                className="btn btn-secondary btn-full"
-                onClick={handleResend}
-                disabled={resendLoading}
-                style={{ marginBottom: 12 }}
-              >
-                {resendLoading
-                  ? <span className="spinner" />
-                  : `Resend reset link (${resendsLeft} left)`
-                }
+            {!limitReached && resendsLeft > 0 && (
+              <button className="btn btn-secondary btn-full"
+                onClick={() => doSend(true)} disabled={resendLoading}
+                style={{ marginBottom: 12 }}>
+                {resendLoading ? <span className="spinner" /> : "Resend reset link"}
               </button>
-            ) : (
-              <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 12, textAlign: "center" }}>
-                Maximum resends reached. Check your spam folder or contact support.
-              </p>
             )}
 
             <button className="btn btn-primary btn-full" onClick={onBack}>
@@ -127,7 +111,6 @@ export default function ForgotPassword({ onBack }) {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <h2 className="form-title">Forgot Password</h2>
-
           <p style={{ fontSize: 14, color: "var(--text-2)", marginBottom: 20, lineHeight: 1.7 }}>
             Enter your account email and we'll send you a reset link.
           </p>
@@ -136,14 +119,10 @@ export default function ForgotPassword({ onBack }) {
 
           <div className="field">
             <label className="field-label">Email</label>
-            <input
-              className="field-input"
-              type="email"
-              placeholder="your@email.com"
-              value={email}
+            <input className="field-input" type="email"
+              placeholder="your@email.com" value={email}
               onChange={(e) => { setEmail(e.target.value); setError(""); }}
-              required
-            />
+              required />
           </div>
 
           <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
@@ -151,9 +130,7 @@ export default function ForgotPassword({ onBack }) {
           </button>
 
           <p className="auth-switch">
-            <button type="button" className="link-btn" onClick={onBack}>
-              ← Back to Login
-            </button>
+            <button type="button" className="link-btn" onClick={onBack}>← Back to Login</button>
           </p>
         </form>
 

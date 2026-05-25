@@ -1,16 +1,9 @@
 // frontend/src/context/AuthContext.jsx
 //
-// KEY CHANGE — session storage strategy:
-//   Refresh token is stored in sessionStorage (not localStorage).
-//   sessionStorage is cleared automatically when the tab/browser is closed,
-//   so the user is always logged out on a fresh tab/window open.
-//   User profile is also in sessionStorage for the same reason.
-//   The in-memory accessToken (ref) already disappears on page close.
-//
-// Other fixes:
-//   - login() maps errorType from backend to specific field errors
-//   - resendVerification() tracks remaining resends from backend response
-//   - Unlimited login/logout — no artificial caps
+// JWT is stored ONLY in:
+//   - accessToken  → React ref (in-memory, gone on page close)
+//   - refreshToken → sessionStorage (cleared on tab/browser close)
+// No JWT is ever written to localStorage.
 
 import { createContext, useContext, useState, useCallback, useRef } from "react";
 import API_URL from "../api";
@@ -19,36 +12,31 @@ const AuthContext = createContext(null);
 
 function isTokenExpired(token) {
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (!payload.exp) return true;
-    // 30s buffer so we refresh before the server rejects it
-    return Date.now() >= payload.exp * 1000 - 30_000;
+    const { exp } = JSON.parse(atob(token.split('.')[1]));
+    return !exp || Date.now() >= exp * 1000 - 30_000;
   } catch {
     return true;
   }
 }
 
 function clearStorage() {
-  // Clear both sessionStorage (current) and localStorage (old keys) on wipe
   sessionStorage.removeItem("ppse_user");
   sessionStorage.removeItem("ppse_refresh_token");
+  // Also wipe any old localStorage keys from previous versions
   localStorage.removeItem("ppse_user");
   localStorage.removeItem("ppse_token");
   localStorage.removeItem("ppse_refresh_token");
 }
 
 export function AuthProvider({ children }) {
-  // Access token lives only in memory — gone on page close
-  const accessTokenRef = useRef(null);
+  const accessTokenRef = useRef(null); // memory only — gone on close
 
   const [user, setUser] = useState(() => {
     try {
-      // Migrate any old localStorage session to sessionStorage on first load
-      const oldUser = localStorage.getItem("ppse_user");
-      const oldRefresh = localStorage.getItem("ppse_refresh_token") || localStorage.getItem("ppse_token");
-      if (oldUser && oldRefresh) {
-        // There was an old session — wipe it. User must log in again.
+      // Wipe any stale localStorage session on first load
+      if (localStorage.getItem("ppse_refresh_token") || localStorage.getItem("ppse_token")) {
         clearStorage();
+        return null;
       }
       return JSON.parse(sessionStorage.getItem("ppse_user") || "null");
     } catch {
@@ -60,12 +48,8 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     try {
       const storedUser = sessionStorage.getItem("ppse_user");
-      const refreshToken = sessionStorage.getItem("ppse_refresh_token");
-      if (!storedUser || !refreshToken) return false;
-      if (isTokenExpired(refreshToken)) {
-        clearStorage();
-        return false;
-      }
+      const rt = sessionStorage.getItem("ppse_refresh_token");
+      if (!storedUser || !rt || isTokenExpired(rt)) { clearStorage(); return false; }
       return true;
     } catch {
       clearStorage();
@@ -73,20 +57,15 @@ export function AuthProvider({ children }) {
     }
   });
 
-  const _persistSession = useCallback((userData, accessToken, refreshToken) => {
+  const _persist = useCallback((userData, accessToken, refreshToken) => {
     accessTokenRef.current = accessToken;
-    // sessionStorage — cleared automatically when tab/browser closes
     sessionStorage.setItem("ppse_user", JSON.stringify(userData));
     sessionStorage.setItem("ppse_refresh_token", refreshToken);
-    // Remove any stale localStorage keys
-    localStorage.removeItem("ppse_user");
-    localStorage.removeItem("ppse_token");
-    localStorage.removeItem("ppse_refresh_token");
     setUser(userData);
     setIsAuthenticated(true);
   }, []);
 
-  const _clearSession = useCallback(() => {
+  const _clear = useCallback(() => {
     accessTokenRef.current = null;
     clearStorage();
     setUser(null);
@@ -94,35 +73,26 @@ export function AuthProvider({ children }) {
   }, []);
 
   const _refreshAccessToken = useCallback(async () => {
-    const refreshToken = sessionStorage.getItem("ppse_refresh_token");
-    if (!refreshToken || isTokenExpired(refreshToken)) {
-      _clearSession();
-      throw new Error("Session expired. Please log in again.");
-    }
-    const res = await fetch(`${API_URL}/api/auth/refresh`, {
+    const rt = sessionStorage.getItem("ppse_refresh_token");
+    if (!rt || isTokenExpired(rt)) { _clear(); throw new Error("Session expired."); }
+
+    const res  = await fetch(`${API_URL}/api/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
+      body: JSON.stringify({ refreshToken: rt }),
     });
-    if (!res.ok) {
-      _clearSession();
-      throw new Error("Session expired. Please log in again.");
-    }
+    if (!res.ok) { _clear(); throw new Error("Session expired."); }
+
     const data = await res.json();
     accessTokenRef.current = data.accessToken;
     sessionStorage.setItem("ppse_refresh_token", data.refreshToken);
-    if (data.user) {
-      sessionStorage.setItem("ppse_user", JSON.stringify(data.user));
-      setUser(data.user);
-    }
+    if (data.user) { sessionStorage.setItem("ppse_user", JSON.stringify(data.user)); setUser(data.user); }
     return data.accessToken;
-  }, [_clearSession]);
+  }, [_clear]);
 
   // ── login ─────────────────────────────────────────────────────────────────
-  // Throws an error with errorType attached so Login.jsx can route to the
-  // correct field (email field vs password field) without string matching.
   const login = useCallback(async (email, password) => {
-    const res = await fetch(`${API_URL}/api/auth/login`, {
+    const res  = await fetch(`${API_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -130,18 +100,18 @@ export function AuthProvider({ children }) {
     const data = await res.json();
     if (!res.ok) {
       const err = new Error(data.message || "Login failed.");
-      err.errorType = data.errorType || "unknown";
+      err.errorType        = data.errorType || "unknown";
       err.needsVerification = data.needsVerification || false;
-      err.email = data.email || email;
+      err.email            = data.email || email;
       throw err;
     }
-    _persistSession(data.user, data.accessToken, data.refreshToken);
+    _persist(data.user, data.accessToken, data.refreshToken);
     return data;
-  }, [_persistSession]);
+  }, [_persist]);
 
   // ── register ──────────────────────────────────────────────────────────────
   const register = useCallback(async (username, email, password) => {
-    const res = await fetch(`${API_URL}/api/auth/register`, {
+    const res  = await fetch(`${API_URL}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, email, password }),
@@ -155,7 +125,7 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  // ── logout — unlimited, no caps ───────────────────────────────────────────
+  // ── logout — unlimited ────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     try {
       if (accessTokenRef.current) {
@@ -164,38 +134,38 @@ export function AuthProvider({ children }) {
           headers: { Authorization: `Bearer ${accessTokenRef.current}` },
         });
       }
-    } catch { /* ignore network errors on logout */ }
-    _clearSession();
-  }, [_clearSession]);
+    } catch { /* ignore */ }
+    _clear();
+  }, [_clear]);
 
-  // ── resendVerification — returns remaining count from backend ─────────────
+  // ── resendVerification ────────────────────────────────────────────────────
   const resendVerification = useCallback(async (email) => {
-    const res = await fetch(`${API_URL}/api/auth/resend-verification`, {
+    const res  = await fetch(`${API_URL}/api/auth/resend-verification`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
     const data = await res.json();
     if (!res.ok) {
-      const err = new Error(data.message || "Failed to resend verification email.");
+      const err = new Error(data.message || "Failed to resend.");
       err.limitReached = data.limitReached || false;
-      err.resendCount = data.resendCount || 0;
       throw err;
     }
-    return data; // includes { resendCount, resendRemaining }
+    return data;
   }, []);
 
   // ── forgotPassword ────────────────────────────────────────────────────────
   const forgotPassword = useCallback(async (email) => {
-    const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
+    const res  = await fetch(`${API_URL}/api/auth/forgot-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
     const data = await res.json();
     if (!res.ok) {
-      const err = new Error(data.message || "Failed to send reset email.");
-      err.errorType = data.errorType || "unknown";
+      const err = new Error(data.message || "Failed.");
+      err.errorType    = data.errorType || "unknown";
+      err.limitReached = data.limitReached || false;
       throw err;
     }
     return data;
@@ -203,70 +173,51 @@ export function AuthProvider({ children }) {
 
   // ── resetPassword ─────────────────────────────────────────────────────────
   const resetPassword = useCallback(async (token, password) => {
-    const res = await fetch(`${API_URL}/api/auth/reset-password`, {
+    const res  = await fetch(`${API_URL}/api/auth/reset-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Failed to reset password.");
+    if (!res.ok) throw new Error(data.message || "Failed.");
     return data;
   }, []);
 
   // ── changePassword ────────────────────────────────────────────────────────
   const changePassword = useCallback(async (currentPassword, newPassword) => {
     let token = accessTokenRef.current;
-    if (!token || isTokenExpired(token)) {
-      token = await _refreshAccessToken();
-    }
-    const res = await fetch(`${API_URL}/api/auth/change-password`, {
+    if (!token || isTokenExpired(token)) token = await _refreshAccessToken();
+    const res  = await fetch(`${API_URL}/api/auth/change-password`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ currentPassword, newPassword }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Failed to change password.");
+    if (!res.ok) throw new Error(data.message || "Failed.");
     return data;
   }, [_refreshAccessToken]);
 
-  // ── authFetch — wraps all authenticated API calls ─────────────────────────
+  // ── authFetch ─────────────────────────────────────────────────────────────
   const authFetch = useCallback(async (url, options = {}) => {
     let token = accessTokenRef.current;
-    if (!token || isTokenExpired(token)) {
-      token = await _refreshAccessToken();
-    }
+    if (!token || isTokenExpired(token)) token = await _refreshAccessToken();
     const res = await fetch(url, {
       ...options,
       headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` },
     });
-    if (res.status === 401) {
-      _clearSession();
-      throw new Error("Session expired. Please log in again.");
-    }
+    if (res.status === 401) { _clear(); throw new Error("Session expired."); }
     return res;
-  }, [_refreshAccessToken, _clearSession]);
+  }, [_refreshAccessToken, _clear]);
 
   return (
     <AuthContext.Provider value={{
-      user,
-      isAuthenticated,
-      login,
-      register,
-      logout,
-      authFetch,
-      resendVerification,
-      forgotPassword,
-      resetPassword,
-      changePassword,
+      user, isAuthenticated,
+      login, register, logout, authFetch,
+      resendVerification, forgotPassword, resetPassword, changePassword,
     }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export function useAuth() { return useContext(AuthContext); }
