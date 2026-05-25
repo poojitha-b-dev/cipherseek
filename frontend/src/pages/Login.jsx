@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 
 const RESEND_LIMIT = 3;
 const COOLDOWN_MS  = 30 * 60 * 1000; // 30 minutes
@@ -47,6 +48,7 @@ function CooldownTimer({ unlocksAt, onUnlocked }) {
 
 export default function Login({ onSwitch, onForgotPassword }) {
   const { login, resendVerification } = useAuth();
+  const { dark, toggle } = useTheme();
 
   const [form, setForm]       = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
@@ -135,6 +137,15 @@ export default function Login({ onSwitch, onForgotPassword }) {
   return (
     <div className="auth-screen">
       <div className="auth-glow" />
+      <button
+        type="button"
+        className="theme-toggle auth-theme-toggle"
+        onClick={toggle}
+        title="Toggle theme"
+        aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+      >
+        {dark ? "☀" : "🌙"}
+      </button>
       <div className="auth-card">
         <div className="auth-header">
           <div className="auth-logo">🔐</div>
