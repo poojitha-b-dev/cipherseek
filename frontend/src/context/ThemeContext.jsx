@@ -1,13 +1,29 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
-  const [dark, setDark] = useState(true);
-  const toggle = () => setDark((d) => !d);
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem("ppse_theme");
+    return saved ? saved === "dark" : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("ppse_theme", dark ? "dark" : "light");
+  }, [dark]);
+
+  const toggle = () => {
+    setDark((d) => !d);
+  };
+
   return (
     <ThemeContext.Provider value={{ dark, toggle }}>
-      <div className={dark ? "theme-dark" : "theme-light"} style={{ overflow: "visible", position: "relative" }}>{children}</div>
+      <div
+        className={dark ? "theme-dark" : "theme-light"}
+        style={{ overflow: "visible", position: "relative" }}
+      >
+        {children}
+      </div>
     </ThemeContext.Provider>
   );
 }
