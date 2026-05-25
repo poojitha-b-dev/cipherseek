@@ -1,10 +1,11 @@
 // frontend/src/pages/Register.jsx
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 
-// Username: letters, digits, underscore, dot only — matches backend rule
 const USERNAME_RE = /^[a-zA-Z0-9._]+$/;
+const RESEND_LIMIT = 3;
+const COOLDOWN_MS  = 30 * 60 * 1000; // 30 minutes
 
 function getPasswordStrength(pw) {
   let s = 0;
@@ -36,38 +37,58 @@ const EyeOff = () => (
   </svg>
 );
 
+function CooldownTimer({ unlocksAt, onUnlocked }) {
+  const [remaining, setRemaining] = useState("");
+
+  useEffect(() => {
+    const tick = () => {
+      const diff = unlocksAt - Date.now();
+      if (diff <= 0) { onUnlocked(); return; }
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setRemaining(`${m}:${s.toString().padStart(2, "0")}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [unlocksAt, onUnlocked]);
+
+  return (
+    <p style={{ fontSize: 12, color: "var(--text-2)", marginTop: 6 }}>
+      Try again in <strong style={{ color: "var(--text)" }}>{remaining}</strong>
+    </p>
+  );
+}
+
 export default function Register({ onSwitch }) {
   const { register, resendVerification } = useAuth();
 
-  const [form, setForm] = useState({ username: "", email: "", password: "", confirm: "" });
-  const [loading, setLoading]           = useState(false);
-  const [showPw, setShowPw]             = useState(false);
-  const [showConfirm, setShowConfirm]   = useState(false);
-  const [pwTouched, setPwTouched]       = useState(false);
+  const [form, setForm]           = useState({ username: "", email: "", password: "", confirm: "" });
+  const [loading, setLoading]     = useState(false);
+  const [showPw, setShowPw]       = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pwTouched, setPwTouched] = useState(false);
 
-  // Per-field inline errors
   const [usernameErr, setUsernameErr] = useState("");
   const [emailErr, setEmailErr]       = useState("");
   const [generalErr, setGeneralErr]   = useState("");
 
-  // Post-registration
+  // Post-registration resend state
   const [registeredEmail, setRegisteredEmail] = useState(null);
-  const [resendDone, setResendDone]           = useState(false);
-  const [resendLoading, setResendLoading]     = useState(false);
-  const [resendMsg, setResendMsg]             = useState("");
-  const [limitReached, setLimitReached]       = useState(false);
+  const [resendCount, setResendCount]   = useState(0);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMsg, setResendMsg]       = useState("");
+  const [cooldownUntil, setCooldownUntil] = useState(null); // timestamp
 
-  const strength = getPasswordStrength(form.password);
+  const strength    = getPasswordStrength(form.password);
+  const inCooldown  = cooldownUntil && Date.now() < cooldownUntil;
+  const limitHit    = resendCount >= RESEND_LIMIT;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm(f => ({ ...f, [name]: value }));
     if (name === "username") {
-      setUsernameErr(
-        value && !USERNAME_RE.test(value)
-          ? "Only letters, numbers, _ and . allowed."
-          : ""
-      );
+      setUsernameErr(value && !USERNAME_RE.test(value) ? "Only letters, numbers, _ and . allowed." : "");
     }
     if (name === "email") setEmailErr("");
     setGeneralErr("");
@@ -77,26 +98,16 @@ export default function Register({ onSwitch }) {
     e.preventDefault();
     setUsernameErr(""); setEmailErr(""); setGeneralErr("");
 
-    // Client-side username format check
-    if (!USERNAME_RE.test(form.username)) {
-      setUsernameErr("Only letters, numbers, _ and . allowed.");
-      return;
-    }
-    if (form.password.length < 8) {
-      setGeneralErr("Password must be at least 8 characters.");
-      return;
-    }
-    if (form.password !== form.confirm) {
-      setGeneralErr("Passwords do not match.");
-      return;
-    }
+    if (!USERNAME_RE.test(form.username)) { setUsernameErr("Only letters, numbers, _ and . allowed."); return; }
+    if (form.password.length < 8)         { setGeneralErr("Password must be at least 8 characters."); return; }
+    if (form.password !== form.confirm)   { setGeneralErr("Passwords do not match."); return; }
 
     setLoading(true);
     try {
       await register(form.username, form.email, form.password);
       setRegisteredEmail(form.email);
     } catch (err) {
-      if (err.errorType === "email_exists")    setEmailErr(err.message);
+      if (err.errorType === "email_exists")      setEmailErr(err.message);
       else if (err.errorType === "username_taken") setUsernameErr(err.message);
       else setGeneralErr(err.message || "Registration failed. Please try again.");
     } finally {
@@ -105,17 +116,23 @@ export default function Register({ onSwitch }) {
   };
 
   const handleResend = async () => {
-    if (limitReached || resendDone) return;
+    if (inCooldown || limitHit || resendLoading) return;
     setResendLoading(true);
     setResendMsg("");
     try {
       await resendVerification(registeredEmail);
-      setResendDone(true);
-      setResendMsg("Verification email resent! Check your inbox and spam folder.");
+      const newCount = resendCount + 1;
+      setResendCount(newCount);
+      if (newCount >= RESEND_LIMIT) {
+        setCooldownUntil(Date.now() + COOLDOWN_MS);
+        setResendMsg("Limit reached. You can resend again after 30 minutes.");
+      } else {
+        setResendMsg("Verification email sent! Check your inbox and spam folder.");
+      }
     } catch (err) {
       if (err.limitReached) {
-        setLimitReached(true);
-        setResendMsg("Verification resend limit reached.");
+        setCooldownUntil(Date.now() + COOLDOWN_MS);
+        setResendMsg("Limit reached. Please try again after 30 minutes.");
       } else {
         setResendMsg("Failed to resend. Please try again.");
       }
@@ -135,33 +152,70 @@ export default function Register({ onSwitch }) {
             <h2 className="auth-title">Check your inbox</h2>
             <p className="auth-subtitle">One more step to activate your account</p>
           </div>
+
           <div style={{ padding: "0 0 24px" }}>
+            {/* Email sent confirmation — green */}
             <div className="alert alert-success" style={{ marginBottom: 20 }}>
-              We sent a verification link to <strong>{registeredEmail}</strong>.
+              We sent a verification link to{" "}
+              <strong>{registeredEmail}</strong>.
               Click that link to activate your account.
             </div>
+
             <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 20, lineHeight: 1.7 }}>
-              The link expires in <strong style={{ color: "var(--text)" }}>24 hours</strong>.
+              The link expires in{" "}
+              <strong style={{ color: "var(--text)" }}>24 hours</strong>.
               Check your spam folder if you don't see it.
             </p>
 
+            {/* "Didn't receive it?" label above the resend button */}
+            <p style={{
+              fontSize: 13,
+              color: "#1d9e75",
+              marginBottom: 8,
+              fontWeight: 500,
+            }}>
+              Didn't receive it?
+            </p>
+
+            {/* Resend feedback message */}
             {resendMsg && (
               <p style={{
-                fontSize: 13, marginBottom: 14,
-                color: limitReached || resendMsg.includes("Failed") ? "var(--error)" : "var(--success)"
+                fontSize: 12, marginBottom: 10,
+                color: (inCooldown || resendMsg.toLowerCase().includes("failed"))
+                  ? "var(--error)" : "#1d9e75",
               }}>
                 {resendMsg}
               </p>
             )}
 
-            {!limitReached && !resendDone && (
-              <button className="btn btn-secondary btn-full"
-                onClick={handleResend} disabled={resendLoading}
-                style={{ marginBottom: 12 }}>
+            {/* Cooldown timer */}
+            {inCooldown && (
+              <CooldownTimer
+                unlocksAt={cooldownUntil}
+                onUnlocked={() => { setCooldownUntil(null); setResendCount(0); setResendMsg(""); }}
+              />
+            )}
+
+            {/* Resend button — green, shown when not in cooldown */}
+            {!inCooldown && (
+              <button
+                className="btn btn-full"
+                onClick={handleResend}
+                disabled={resendLoading}
+                style={{
+                  marginBottom: 12,
+                  background: "linear-gradient(135deg, #1d9e75, #16a34a)",
+                  color: "#fff",
+                  border: "none",
+                  cursor: resendLoading ? "not-allowed" : "pointer",
+                  opacity: resendLoading ? 0.7 : 1,
+                }}
+              >
                 {resendLoading ? <span className="spinner" /> : "Resend verification email"}
               </button>
             )}
 
+            {/* Go to login — primary blue/teal */}
             <button className="btn btn-primary btn-full" onClick={onSwitch}>
               Go to Login
             </button>
@@ -187,7 +241,6 @@ export default function Register({ onSwitch }) {
 
           {generalErr && <div className="alert alert-error">{generalErr}</div>}
 
-          {/* Username */}
           <div className="field">
             <label className="field-label">Username</label>
             <input className="field-input" type="text" name="username"
@@ -197,13 +250,10 @@ export default function Register({ onSwitch }) {
               required />
             {usernameErr
               ? <p style={{ fontSize: 12, color: "var(--error)", marginTop: 4 }}>{usernameErr}</p>
-              : <p style={{ fontSize: 11, color: "var(--text-2)", marginTop: 4 }}>
-                  Letters, numbers, _ and . only. No spaces.
-                </p>
+              : <p style={{ fontSize: 11, color: "var(--text-2)", marginTop: 4 }}>Letters, numbers, _ and . only. No spaces.</p>
             }
           </div>
 
-          {/* Email */}
           <div className="field">
             <label className="field-label">Email</label>
             <input className="field-input" type="email" name="email"
@@ -214,7 +264,6 @@ export default function Register({ onSwitch }) {
             {emailErr && <p style={{ fontSize: 12, color: "var(--error)", marginTop: 4 }}>{emailErr}</p>}
           </div>
 
-          {/* Password */}
           <div className="field">
             <label className="field-label">Password</label>
             <div className="password-wrapper">
@@ -234,14 +283,11 @@ export default function Register({ onSwitch }) {
                   <div className="strength-bar-fill"
                     style={{ width: strength.width, backgroundColor: strength.color }} />
                 </div>
-                <span className="strength-label" style={{ color: strength.color }}>
-                  {strength.label}
-                </span>
+                <span className="strength-label" style={{ color: strength.color }}>{strength.label}</span>
               </div>
             )}
           </div>
 
-          {/* Confirm Password */}
           <div className="field">
             <label className="field-label">Confirm Password</label>
             <div className="password-wrapper">

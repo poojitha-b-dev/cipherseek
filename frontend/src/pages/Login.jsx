@@ -1,7 +1,10 @@
 // frontend/src/pages/Login.jsx
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+
+const RESEND_LIMIT = 3;
+const COOLDOWN_MS  = 30 * 60 * 1000; // 30 minutes
 
 const Eye = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
@@ -19,25 +22,49 @@ const EyeOff = () => (
   </svg>
 );
 
+function CooldownTimer({ unlocksAt, onUnlocked }) {
+  const [remaining, setRemaining] = useState("");
+
+  useEffect(() => {
+    const tick = () => {
+      const diff = unlocksAt - Date.now();
+      if (diff <= 0) { onUnlocked(); return; }
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setRemaining(`${m}:${s.toString().padStart(2, "0")}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [unlocksAt, onUnlocked]);
+
+  return (
+    <p style={{ fontSize: 12, color: "var(--text-2)", marginTop: 6 }}>
+      Try again in <strong style={{ color: "var(--text)" }}>{remaining}</strong>
+    </p>
+  );
+}
+
 export default function Login({ onSwitch, onForgotPassword }) {
   const { login, resendVerification } = useAuth();
 
-  const [form, setForm]           = useState({ email: "", password: "" });
-  const [loading, setLoading]     = useState(false);
-  const [showPw, setShowPw]       = useState(false);
+  const [form, setForm]       = useState({ email: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw]   = useState(false);
 
-  // Per-field errors — driven by errorType from backend, no string matching
   const [emailErr, setEmailErr]       = useState("");
   const [passwordErr, setPasswordErr] = useState("");
   const [generalErr, setGeneralErr]   = useState("");
 
-  // Email-not-verified state
-  const [unverified, setUnverified]       = useState(false);
+  const [unverified, setUnverified]           = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState("");
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendMsg, setResendMsg]         = useState("");
-  const [limitReached, setLimitReached]   = useState(false);
-  const [resendDone, setResendDone]       = useState(false);
+  const [resendCount, setResendCount]         = useState(0);
+  const [resendLoading, setResendLoading]     = useState(false);
+  const [resendMsg, setResendMsg]             = useState("");
+  const [cooldownUntil, setCooldownUntil]     = useState(null);
+
+  const inCooldown = cooldownUntil && Date.now() < cooldownUntil;
+  const limitHit   = resendCount >= RESEND_LIMIT;
 
   const clearErrors = () => {
     setEmailErr(""); setPasswordErr(""); setGeneralErr("");
@@ -58,7 +85,6 @@ export default function Login({ onSwitch, onForgotPassword }) {
     setLoading(true);
     try {
       await login(form.email, form.password);
-      // Success → AuthContext sets isAuthenticated → App re-renders
     } catch (err) {
       switch (err.errorType) {
         case "email_not_found":
@@ -81,17 +107,23 @@ export default function Login({ onSwitch, onForgotPassword }) {
   };
 
   const handleResend = async () => {
-    if (limitReached || resendDone) return;
+    if (inCooldown || limitHit || resendLoading) return;
     setResendLoading(true);
     setResendMsg("");
     try {
       await resendVerification(unverifiedEmail);
-      setResendDone(true);
-      setResendMsg("Verification email sent! Check your inbox and spam folder.");
+      const newCount = resendCount + 1;
+      setResendCount(newCount);
+      if (newCount >= RESEND_LIMIT) {
+        setCooldownUntil(Date.now() + COOLDOWN_MS);
+        setResendMsg("Limit reached. You can resend again after 30 minutes.");
+      } else {
+        setResendMsg("Verification email sent! Check your inbox and spam folder.");
+      }
     } catch (err) {
       if (err.limitReached) {
-        setLimitReached(true);
-        setResendMsg("Verification resend limit reached.");
+        setCooldownUntil(Date.now() + COOLDOWN_MS);
+        setResendMsg("Limit reached. Please try again after 30 minutes.");
       } else {
         setResendMsg("Failed to resend. Please try again.");
       }
@@ -113,22 +145,55 @@ export default function Login({ onSwitch, onForgotPassword }) {
         <form className="auth-form" onSubmit={handleSubmit}>
           <h2 className="form-title">Sign In</h2>
 
-          {/* General / verification banner */}
+          {/* General error banner */}
           {generalErr && (
             <div className="alert alert-error">
               {generalErr}
+
+              {/* Verification resend section */}
               {unverified && (
-                <div style={{ marginTop: 10 }}>
+                <div style={{ marginTop: 12 }}>
+                  <p style={{ fontSize: 13, color: "#1d9e75", fontWeight: 500, marginBottom: 8 }}>
+                    Didn't receive it?
+                  </p>
+
                   {resendMsg && (
-                    <p style={{ fontSize: 12, marginBottom: 6,
-                      color: limitReached || resendMsg.includes("Failed") ? "var(--error)" : "var(--success)" }}>
+                    <p style={{
+                      fontSize: 12, marginBottom: 8,
+                      color: (inCooldown || resendMsg.toLowerCase().includes("failed"))
+                        ? "#fbbf24" : "#1d9e75",
+                    }}>
                       {resendMsg}
                     </p>
                   )}
-                  {!limitReached && !resendDone && (
-                    <button type="button" className="link-btn"
-                      onClick={handleResend} disabled={resendLoading}
-                      style={{ fontSize: 13 }}>
+
+                  {inCooldown && (
+                    <CooldownTimer
+                      unlocksAt={cooldownUntil}
+                      onUnlocked={() => { setCooldownUntil(null); setResendCount(0); setResendMsg(""); }}
+                    />
+                  )}
+
+                  {!inCooldown && (
+                    <button
+                      type="button"
+                      onClick={handleResend}
+                      disabled={resendLoading}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "10px 0",
+                        marginTop: 4,
+                        background: "linear-gradient(135deg, #1d9e75, #16a34a)",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: resendLoading ? "not-allowed" : "pointer",
+                        opacity: resendLoading ? 0.7 : 1,
+                      }}
+                    >
                       {resendLoading ? "Sending…" : "Resend verification email"}
                     </button>
                   )}
