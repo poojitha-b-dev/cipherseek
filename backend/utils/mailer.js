@@ -1,64 +1,15 @@
 // backend/utils/mailer.js
-//
-// IMPORTANT — Gmail SMTP requires an App Password, NOT your regular Gmail password.
-// Regular Gmail passwords stopped working for SMTP in May 2022.
-//
-// How to create a Gmail App Password:
-//   1. Go to https://myaccount.google.com/security
-//   2. Enable 2-Step Verification (required)
-//   3. Go to https://myaccount.google.com/apppasswords
-//   4. Select app: "Mail", device: "Other" → type "PPSE"
-//   5. Copy the 16-character password (no spaces needed)
-//   6. In Railway set: MAIL_PASS=abcdefghijklmnop
-//
-// Railway env vars required:
-//   MAIL_HOST=smtp.gmail.com
-//   MAIL_PORT=587
-//   MAIL_SECURE=false   ← STARTTLS on 587, not SSL on 465
-//   MAIL_USER=your@gmail.com
-//   MAIL_PASS=your16charapppassword   ← App Password, NOT Gmail password
-//   MAIL_FROM="PPSE Security" <your@gmail.com>
-//   FRONTEND_URL=https://your-app.netlify.app
+const { Resend } = require('resend');
 
-const nodemailer = require('nodemailer');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-let _transporter = null;
-
-function getTransporter() {
-  if (_transporter) return _transporter;
-
-  const port   = parseInt(process.env.MAIL_PORT || '587', 10);
-  const secure = port === 465; // 465=SSL true, 587=STARTTLS false
-
-  _transporter = nodemailer.createTransport({
-    host:   process.env.MAIL_HOST || 'smtp.gmail.com',
-    port,
-    secure,
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS,
-    },
-    connectionTimeout: 15000,
-    greetingTimeout:   15000,
-    socketTimeout:     20000,
-  });
-
-  return _transporter;
-}
-
-// Verify SMTP on startup — shows in Railway deploy logs immediately
+// Startup check
 async function verifyMailer() {
-  try {
-    await getTransporter().verify();
-    console.log('✅ SMTP connection verified — emails will send correctly.');
-    console.log('   Sending as:', process.env.MAIL_USER);
-  } catch (err) {
-    console.error('❌ SMTP verification FAILED:', err.message);
-    console.error('   → Check MAIL_USER and MAIL_PASS in Railway Variables.');
-    console.error('   → MAIL_PASS must be a Gmail App Password (16 chars), NOT your Gmail login password.');
-    console.error('   → Generate one at: https://myaccount.google.com/apppasswords');
-    console.error('   → MAIL_PORT should be 587, MAIL_SECURE should be false (or unset).');
+  if (!process.env.RESEND_API_KEY) {
+    console.error('❌ RESEND_API_KEY is not set in environment variables.');
+    return;
   }
+  console.log('✅ Resend mailer ready. Sending as:', process.env.MAIL_FROM || 'onboarding@resend.dev');
 }
 verifyMailer();
 
@@ -107,28 +58,24 @@ function buildHtmlEmail({ title, bodyHtml }) {
 </html>`;
 }
 
-// ── Core send helper — full error logging ─────────────────────────
+// ── Core send helper ───────────────────────────────────────────────
 async function sendMail({ to, subject, html, text }) {
+  const from = process.env.MAIL_FROM || 'PPSE Security <onboarding@resend.dev>';
   try {
-    const info = await getTransporter().sendMail({
-      from: process.env.MAIL_FROM || `"PPSE Security" <${process.env.MAIL_USER}>`,
-      to,
-      subject,
-      html,
-      text,
-    });
-    console.log(`✅ Email sent → ${to} | MessageId: ${info.messageId}`);
-    return info;
+    const { data, error } = await resend.emails.send({ from, to, subject, html, text });
+    if (error) {
+      console.error(`❌ Email send FAILED → ${to}`, error);
+      throw new Error(error.message);
+    }
+    console.log(`✅ Email sent → ${to} | id: ${data.id}`);
+    return data;
   } catch (err) {
-    console.error(`❌ Email send FAILED → ${to}`);
-    console.error('   Code:', err.code);
-    console.error('   Message:', err.message);
-    if (err.response) console.error('   SMTP response:', err.response);
+    console.error(`❌ Email send FAILED → ${to}:`, err.message);
     throw err;
   }
 }
 
-// ── Verification email ────────────────────────────────────────────
+// ── Verification email ─────────────────────────────────────────────
 async function sendVerificationEmail(to, username, token) {
   const url = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
   await sendMail({
@@ -151,7 +98,7 @@ async function sendVerificationEmail(to, username, token) {
   });
 }
 
-// ── Password reset email ──────────────────────────────────────────
+// ── Password reset email ───────────────────────────────────────────
 async function sendPasswordResetEmail(to, username, token) {
   const url = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
   await sendMail({
