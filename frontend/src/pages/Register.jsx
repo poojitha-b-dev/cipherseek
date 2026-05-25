@@ -1,8 +1,7 @@
 // frontend/src/pages/Register.jsx
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useTheme } from "../context/ThemeContext";
 import CooldownTimer from "../components/CooldownTimer";
 import { Eye, EyeOff } from "../components/EyeToggle";
 
@@ -20,7 +19,7 @@ function getPasswordStrength(pw) {
   if (/[^A-Za-z0-9]/.test(pw)) s++;
   if (s <= 2) return { label: "Weak",   color: "#e24b4a", width: "25%" };
   if (s <= 3) return { label: "Fair",   color: "#ef9f27", width: "50%" };
-  if (s <= 4) return { label: "Medium", color: "#639922", width: "75%" };
+  if (s <= 4) return { label: "Good",   color: "#639922", width: "75%" };
   return              { label: "Strong", color: "#1d9e75", width: "100%" };
 }
 
@@ -42,11 +41,10 @@ export default function Register({ onSwitch }) {
   const [resendCount, setResendCount]   = useState(0);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMsg, setResendMsg]       = useState("");
-  const [cooldownUntil, setCooldownUntil] = useState(null); // timestamp
+  const [cooldownUntil, setCooldownUntil] = useState(null);
 
   const strength    = getPasswordStrength(form.password);
   const inCooldown  = cooldownUntil && Date.now() < cooldownUntil;
-  const limitHit    = resendCount >= RESEND_LIMIT;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -71,7 +69,7 @@ export default function Register({ onSwitch }) {
       await register(form.username, form.email, form.password);
       setRegisteredEmail(form.email);
     } catch (err) {
-      if (err.errorType === "email_exists")      setEmailErr(err.message);
+      if (err.errorType === "email_exists")        setEmailErr(err.message);
       else if (err.errorType === "username_taken") setUsernameErr(err.message);
       else setGeneralErr(err.message || "Registration failed. Please try again.");
     } finally {
@@ -80,7 +78,7 @@ export default function Register({ onSwitch }) {
   };
 
   const handleResend = async () => {
-    if (inCooldown || limitHit || resendLoading) return;
+    if (inCooldown || resendCount >= RESEND_LIMIT || resendLoading) return;
     setResendLoading(true);
     setResendMsg("");
     try {
@@ -118,7 +116,6 @@ export default function Register({ onSwitch }) {
           </div>
 
           <div style={{ padding: "0 0 24px" }}>
-            {/* Email sent confirmation — green */}
             <div className="alert alert-success" style={{ marginBottom: 20 }}>
               We sent a verification link to{" "}
               <strong>{registeredEmail}</strong>.
@@ -131,17 +128,10 @@ export default function Register({ onSwitch }) {
               Check your spam folder if you don't see it.
             </p>
 
-            {/* "Didn't receive it?" label above the resend button */}
-            <p style={{
-              fontSize: 13,
-              color: "#1d9e75",
-              marginBottom: 8,
-              fontWeight: 500,
-            }}>
+            <p style={{ fontSize: 13, color: "#1d9e75", marginBottom: 8, fontWeight: 500 }}>
               Didn't receive it?
             </p>
 
-            {/* Resend feedback message */}
             {resendMsg && (
               <p style={{
                 fontSize: 12, marginBottom: 10,
@@ -152,7 +142,6 @@ export default function Register({ onSwitch }) {
               </p>
             )}
 
-            {/* Cooldown timer */}
             {inCooldown && (
               <CooldownTimer
                 unlocksAt={cooldownUntil}
@@ -160,7 +149,6 @@ export default function Register({ onSwitch }) {
               />
             )}
 
-            {/* Resend button — green, shown when not in cooldown */}
             {!inCooldown && (
               <button
                 className="btn btn-full"
@@ -179,7 +167,6 @@ export default function Register({ onSwitch }) {
               </button>
             )}
 
-            {/* Go to login — primary blue/teal */}
             <button className="btn btn-primary btn-full" onClick={onSwitch}>
               Go to Login
             </button>
