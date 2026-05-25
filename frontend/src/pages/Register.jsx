@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import CooldownTimer from "../components/CooldownTimer";
+import { Eye, EyeOff } from "../components/EyeToggle";
 
 const USERNAME_RE = /^[a-zA-Z0-9._]+$/;
 const RESEND_LIMIT = 3;
