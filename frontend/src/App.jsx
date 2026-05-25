@@ -1,11 +1,4 @@
 // frontend/src/App.jsx
-// Adds URL-aware routing for the new auth pages:
-//   /verify-email?token=...    → VerifyEmail page (linked from email)
-//   /reset-password?token=...  → ResetPassword page (linked from email)
-//   /forgot-password           → ForgotPassword page
-//   /change-password           → ChangePassword page (authenticated)
-//
-// All other routing behaviour is unchanged from the original.
 
 import { useState, useEffect } from "react";
 import { ThemeProvider } from "./context/ThemeContext";
@@ -23,20 +16,35 @@ import ResetPassword from "./pages/ResetPassword";
 import ChangePassword from "./pages/ChangePassword";
 import "./index.css";
 
-// ── Read the current URL path / query params ───────────────────────
 function getCurrentRoute() {
-  const path = window.location.pathname;
-  const params = new URLSearchParams(window.location.search);
-  return { path, params };
+  return {
+    path:   window.location.pathname,
+    params: new URLSearchParams(window.location.search),
+  };
 }
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
-  const [page, setPage] = useState("dashboard");
-  const [route] = useState(getCurrentRoute);
+  const [page, setPage]     = useState("dashboard");
+  const [route]             = useState(getCurrentRoute);
 
-  // ── Handle special URL-based routes (from email links) ────────────
-  // These must work whether the user is logged in or not.
+  // FIX: useEffect MUST be at the top — before any conditional returns.
+  // Previously it was placed after an early return, which React forbids
+  // (Rules of Hooks). This caused a silent crash → blank white page on
+  // login and logout.
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Just logged in — make sure we land on dashboard, not a stale auth page
+      if (["login", "register", "forgot-password"].includes(page)) {
+        setPage("dashboard");
+      }
+    } else {
+      // Just logged out — reset to login view
+      setPage("login");
+    }
+  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Email-link routes — work regardless of auth state ─────────────
   if (route.path === "/verify-email") {
     return <VerifyEmail token={route.params.get("token")} />;
   }
@@ -44,18 +52,18 @@ function AppRoutes() {
     return <ResetPassword token={route.params.get("token")} />;
   }
   if (route.path === "/forgot-password") {
-    return <ForgotPassword onBack={() => navigateTo("/")} />;
+    return <ForgotPassword onBack={() => { window.history.replaceState({}, "", "/"); setPage("login"); }} />;
   }
 
-  // ── Unauthenticated app-state routing ─────────────────────────────
+  // ── Not logged in ──────────────────────────────────────────────────
   if (!isAuthenticated) {
-    // Keep "forgot-password" accessible as an in-app state too
     if (page === "forgot-password") {
       return <ForgotPassword onBack={() => setPage("login")} />;
     }
-    return page === "register" ? (
-      <Register onSwitch={() => setPage("login")} />
-    ) : (
+    if (page === "register") {
+      return <Register onSwitch={() => setPage("login")} />;
+    }
+    return (
       <Login
         onSwitch={() => setPage("register")}
         onForgotPassword={() => setPage("forgot-password")}
@@ -63,31 +71,19 @@ function AppRoutes() {
     );
   }
 
-  // ── Authenticated routing ─────────────────────────────────────────
-  // Redirect to dashboard once logged in (handles stale page state)
-  useEffect(() => {
-    if (isAuthenticated && (page === "login" || page === "register" || page === "forgot-password")) {
-      setPage("dashboard");
-    }
-  }, [isAuthenticated, page]);
-
+  // ── Logged in ──────────────────────────────────────────────────────
   return (
     <div className="app-shell">
       <Navbar page={page} setPage={setPage} />
       <main className="main-content">
-        {page === "dashboard" && <Dashboard setPage={setPage} />}
-        {page === "upload" && <Upload />}
-        {page === "search" && <Search />}
-        {page === "about" && <About />}
+        {page === "dashboard"       && <Dashboard setPage={setPage} />}
+        {page === "upload"          && <Upload />}
+        {page === "search"          && <Search />}
+        {page === "about"           && <About />}
         {page === "change-password" && <ChangePassword onBack={() => setPage("dashboard")} />}
       </main>
     </div>
   );
-}
-
-// Simple helper for redirecting after email-link landing
-function navigateTo(path) {
-  window.location.href = path;
 }
 
 export default function App() {
