@@ -4,12 +4,12 @@ const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
-    const saved = localStorage.getItem("ppse_theme");
+    const saved = localStorage.getItem("cipherseek_theme");
     return saved ? saved === "dark" : true;
   });
 
   useEffect(() => {
-    localStorage.setItem("ppse_theme", dark ? "dark" : "light");
+    localStorage.setItem("cipherseek_theme", dark ? "dark" : "light");
   }, [dark]);
 
   const toggle = () => {

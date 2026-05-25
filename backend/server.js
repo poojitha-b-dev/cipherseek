@@ -52,7 +52,7 @@ app.use('/api/documents', documentRoutes);
 
 // ── Health check ───────────────────────────────────────────────────
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'PPSE API is running' });
+  res.json({ status: 'ok', message: 'CipherSeek API is running' });
 });
 
 // ── Start ──────────────────────────────────────────────────────────

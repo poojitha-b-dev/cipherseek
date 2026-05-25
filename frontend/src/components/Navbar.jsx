@@ -38,8 +38,8 @@ export default function Navbar({ page, setPage }) {
         <div className="navbar-brand">
           <ShieldIcon />
           <div>
-            <div className="brand-title">PPSE</div>
-            <div className="brand-sub">Privacy-Preserving Searchable Encryption</div>
+            <div className="brand-title">CipherSeek</div>
+            <div className="brand-sub">Secure Searchable Encryption</div>
           </div>
         </div>
 

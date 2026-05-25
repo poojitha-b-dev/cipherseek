@@ -1,5 +1,5 @@
 -- ============================================================
--- PPSE Migration 003 — Final schema additions
+-- CipherSeek Migration 003 — Final schema additions
 -- Run AFTER 002_auth_upgrade.sql has been applied.
 -- Adds columns needed for resend tracking and reset rate limiting.
 -- Safe to run on live DB — uses IF NOT EXISTS throughout.

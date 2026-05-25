@@ -4,6 +4,9 @@
 
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 
 function getPasswordStrength(password) {
   let score = 0;

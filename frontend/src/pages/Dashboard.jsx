@@ -54,8 +54,8 @@ export default function Dashboard({ setPage }) {
           <div className="hero-center">
 
             <h1 className="db-main-title">
-              Privacy-Preserving Searchable Encryption
-              <span className="db-ppse-accent"> (PPSE)</span>
+              Secure Searchable Encryption
+              <span className="db-CipherSeek-accent"> (CipherSeek)</span>
             </h1>
 
             <p className="db-main-sub">

@@ -48,7 +48,7 @@ export default function VerifyEmail({ token }) {
             {status === "already" && "✅"}
             {status === "error" && "❌"}
           </div>
-          <h1 className="auth-title">PPSE</h1>
+          <h1 className="auth-title">CipherSeek</h1>
           <p className="auth-subtitle">Email Verification</p>
         </div>
 

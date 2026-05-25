@@ -12,7 +12,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 if (!API_URL) {
   console.warn(
-    "[PPSE] VITE_API_URL is not set. " +
+    "[CipherSeek] VITE_API_URL is not set. " +
     "Add it in Vercel → Settings → Environment Variables and redeploy."
   );
 }

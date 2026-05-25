@@ -1,158 +1,261 @@
-# 🔐 PPSE – Privacy-Preserving Searchable Encryption System
+# CipherSeek
 
-PPSE is a full-stack web application that enables users to securely upload, encrypt, store, and search documents using a Privacy-Preserving Encryption with Keyword Search (PEKS) scheme.
+### Secure Searchable Encryption Platform
 
-The system ensures:
-- Secure encrypted document storage
-- Privacy-preserving keyword search
-- Trapdoor-based matching
-- Secure authentication
-- End-to-end confidentiality
+CipherSeek is a full-stack cryptography-focused web application designed for privacy-preserving encrypted document storage and secure keyword search using a PEKS-inspired searchable encryption architecture.
+
+The platform enables users to securely upload encrypted documents, generate protected searchable indexes, and perform encrypted keyword verification without exposing plaintext data.
 
 ---
 
-# 🌐 Live Deployment
+# Live Demo
 
 ## Frontend
-Deployed on Netlify
+
+https://your-vercel-url.vercel.app
 
 ## Backend
-Deployed on Railway
 
-## Automatic Deployment
-GitHub is connected to both Netlify and Railway.
-
-Every push to the `main` branch automatically redeploys the application.
+https://your-railway-url.up.railway.app
 
 ---
 
-# 👩‍💻 Developer
+# Key Highlights
 
-**Banoth Poojitha**
-
-GitHub:  
-https://github.com/Letitbe098/ppse-project
-
----
-
-# 🚀 Features
-
-- JWT Authentication
-- Secure User Registration & Login
-- AES-256-CBC Document Encryption
-- PEKS-Based Secure Keyword Search
-- Trapdoor-Based Matching
-- Duplicate Keyword Detection
-- Secure File Uploads
-- Responsive UI
-- Dark / Light Theme Toggle
-- Binary File Download Support
+* AES-256-CBC document encryption
+* PEKS-inspired searchable encryption
+* Secure trapdoor generation
+* JWT authentication with refresh-token rotation
+* Session-only authentication persistence
+* Email verification and password reset system
+* Privacy-preserving keyword search
+* Secure encrypted document retrieval
+* Modern responsive UI with dark/light themes
+* Production-style deployment architecture
 
 ---
 
-# 🏗️ System Architecture
+# System Overview
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| Frontend | React.js + Vite | User Interface |
-| Backend | Node.js + Express.js | API & Encryption Logic |
-| Database | MySQL | Encrypted Data Storage |
-| Security | AES + PEKS + JWT | Privacy & Authentication |
+CipherSeek allows users to:
+
+* Register and verify accounts securely
+* Upload encrypted documents
+* Generate searchable encrypted indexes
+* Search encrypted data without exposing plaintext keywords
+* Retrieve matching encrypted documents securely
+* Maintain authenticated sessions securely using rotating refresh tokens
+
+The system prevents direct exposure of:
+
+* plaintext document contents
+* raw search keywords
+* encryption-sensitive storage data
 
 ---
 
-# 🛠️ Technology Stack
+# Features
+
+## Authentication & Session Security
+
+* User Registration
+* Email Verification
+* JWT Authentication
+* Refresh Token Rotation
+* Session-only Persistence
+* Silent Access Token Refresh
+* Secure Logout Invalidation
+* Forgot Password Flow
+* Password Reset Flow
+* Change Password Functionality
+* Disposable Email Detection
+* Custom Rate Limiting
+* Protected API Routes
+
+---
+
+## Cryptography & Searchable Encryption
+
+* AES-256-CBC Encryption
+* SHA-256 Keyword Hashing
+* HMAC-SHA256 Integrity Validation
+* ECDH secp256k1 Key Derivation
+* PEKS-inspired Searchable Encryption
+* Trapdoor-based Keyword Verification
+* Encrypted Index Matching
+* Duplicate Detection using Secure Trapdoor Verification
+
+---
 
 ## Frontend
-- React.js
-- Vite
-- React Context API
-- Fetch API
-- Custom CSS
+
+* React + Vite
+* Context API State Management
+* Responsive UI Design
+* Dark/Light Theme Support
+* Custom CSS Design System
+* Session-based Authentication Persistence
+
+---
 
 ## Backend
-- Node.js
-- Express.js
-- Multer
-- dotenv
-- CORS
 
-## Database
-- MySQL
-- mysql2
-
-## Security & Cryptography
-- AES-256-CBC
-- ECDH-based PEKS
-- secp256k1
-- SHA-256
-- HMAC-SHA256
-- bcryptjs
-- JWT
+* Express.js REST API
+* MySQL Database Integration
+* Secure Middleware Architecture
+* Authentication Middleware
+* Custom Security Utilities
+* Email Service Integration using Brevo API
 
 ---
 
-# 🔐 Security Design
+# Tech Stack
 
-| Component | Method |
-|---|---|
-| Document Encryption | AES-256-CBC |
-| Keyword Encryption | PEKS |
-| Secure Search | Trapdoor + Test() |
-| Password Security | bcrypt |
-| Session Handling | JWT |
-| Duplicate Detection | PEKS Test() |
-
----
-
-# ⚙️ How the System Works
-
-## Document Upload
-1. User uploads document
-2. Document encrypted using AES-256-CBC
-3. Keyword encrypted using PEKS
-4. Encrypted data stored in MySQL
-
-## Secure Search
-1. User enters keyword
-2. Trapdoor generated
-3. PEKS Test() runs against encrypted keywords
-4. Matching encrypted documents returned
-5. Documents decrypted before display
+| Layer             | Technology                 |
+| ----------------- | -------------------------- |
+| Frontend          | React, Vite                |
+| Backend           | Node.js, Express.js        |
+| Database          | MySQL                      |
+| Deployment        | Vercel + Railway           |
+| Email Service     | Brevo API                  |
+| Encryption        | AES-256-CBC                |
+| Search Encryption | PEKS-inspired Architecture |
+| Authentication    | JWT + Refresh Tokens       |
 
 ---
 
-# 🔬 PEKS Construction
+# Project Architecture
 
 ```txt
-PEKS(pk, w):
-  r      = random EC key pair
-  A      = g^r
-  shared = ECDH(r, pk)
-
-  h1w    = SHA256(w)
-  B      = H2(shared) XOR h1w
-  tag    = HMAC(h1w, A || B)
-
-Trapdoor(sk, w):
-  h1w = SHA256(w)
-  td  = HMAC(sk, h1w)
-
-Test():
-  reconstruct shared secret
-  verify ciphertext integrity
+Client (React + Vite)
+        │
+        ▼
+Authentication Layer
+(JWT + Refresh Rotation)
+        │
+        ▼
+Searchable Encryption Layer
+(AES-256-CBC + PEKS)
+        │
+        ▼
+Express Backend API
+        │
+        ▼
+MySQL Database
 ```
-
 
 ---
 
-# 🌍 Local Development Setup
+# Authentication Flow
 
-## Prerequisites
+```txt
+User Login
+    │
+    ▼
+JWT Access Token Issued
+    │
+    ▼
+Refresh Token Stored in sessionStorage
+    │
+    ▼
+Access Token Stored Only in Memory
+    │
+    ▼
+Silent Token Refresh
+    │
+    ▼
+Secure Session Persistence
+```
 
-- Node.js v18+
-- MySQL
-- Git
+---
+
+# Encryption Workflow
+
+```txt
+Document Upload
+      │
+      ▼
+AES-256-CBC Encryption
+      │
+      ▼
+Keyword Extraction
+      │
+      ▼
+SHA-256 Hashing
+      │
+      ▼
+Trapdoor Generation
+      │
+      ▼
+Encrypted Index Storage
+      │
+      ▼
+Secure Search Verification
+```
+
+---
+
+# Searchable Encryption Workflow
+
+```txt
+Keyword
+   │
+   ▼
+SHA-256 Hash
+   │
+   ▼
+Trapdoor Generation
+   │
+   ▼
+Encrypted Index Verification
+   │
+   ▼
+Matching Encrypted Documents
+```
+
+---
+
+# Folder Structure
+
+```txt
+project-root/
+│
+├── backend/
+│   ├── config/
+│   ├── middleware/
+│   ├── routes/
+│   ├── utils/
+│   ├── crypt.js
+│   ├── peks.js
+│   └── server.js
+│
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   │   ├── assets/
+│   │   ├── components/
+│   │   ├── context/
+│   │   ├── pages/
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   │
+│   ├── index.html
+│   ├── vite.config.js
+│   └── vercel.json
+│
+└── README.md
+```
+
+---
+
+# Installation
+
+## Clone Repository
+
+```bash
+git clone https://github.com/poojitha-b-dev/cipherseek.git
+cd cipherseek
+```
 
 ---
 
@@ -161,25 +264,7 @@ Test():
 ```bash
 cd backend
 npm install
-```
-
-Create `backend/.env`
-
-```env
-DB_HOST=127.0.0.1
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=secure_docs
-
-JWT_SECRET=your_secret
-ENCRYPTION_KEY=your_encryption_key
-PEKS_MASTER_SECRET=your_peks_secret
-```
-
-Run backend:
-
-```bash
-node server.js
+npm start
 ```
 
 Backend runs on:
@@ -198,12 +283,6 @@ npm install
 npm run dev
 ```
 
-Create `frontend/.env`
-
-```env
-VITE_API_URL=http://localhost:5000
-```
-
 Frontend runs on:
 
 ```txt
@@ -212,153 +291,156 @@ http://localhost:5173
 
 ---
 
-# 🚀 Production Deployment
+# Environment Variables
 
-## Frontend Deployment
-- Hosted using Netlify
-- SPA routing handled using `_redirects`
+## Backend `.env`
 
-`frontend/public/_redirects`
+```env
+PORT=
+
+DB_HOST=
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
+
+JWT_SECRET=
+JWT_REFRESH_SECRET=
+
+ENCRYPTION_KEY=
+PEKS_MASTER_SECRET=
+
+BREVO_API_KEY=
+MAIL_FROM=
+
+FRONTEND_URL=
+```
+
+---
+
+## Frontend `.env`
+
+```env
+VITE_API_URL=http://localhost:5000
+```
+
+---
+
+# API Endpoints
+
+## Authentication Routes
 
 ```txt
-/* /index.html 200
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/auth/logout
+POST   /api/auth/refresh
+POST   /api/auth/forgot-password
+POST   /api/auth/reset-password
+POST   /api/auth/change-password
+POST   /api/auth/resend-verification
+
+GET    /api/auth/verify-email/:token
+GET    /api/auth/me
 ```
+
+---
+
+## Document Routes
+
+```txt
+POST   /api/documents/save
+POST   /api/documents/verify
+GET    /api/documents
+```
+
+---
+
+# Deployment
+
+## Frontend Deployment
+
+Hosted using:
+
+* Vercel
+
+Features:
+
+* Automatic GitHub redeployment
+* Environment variable management
+* Production build optimization
+
+---
 
 ## Backend Deployment
-- Hosted using Railway
 
-## Production Environment Variables
+Hosted using:
 
-Netlify frontend uses the deployed Railway backend URL through environment variables.
+* Railway
 
----
+Features:
 
-# 📱 Responsive Design
-
-The application UI is optimized for:
-- Desktop
-- Tablet
-- Mobile Devices
-
-Responsive improvements include:
-- Flexible layouts
-- Mobile navigation
-- Adaptive containers
-- Overflow handling
+* Automatic GitHub redeployment
+* Secure environment variable management
+* Managed deployment pipeline
 
 ---
 
-# 🧪 Testing
+# Security Design
 
-Run PEKS unit tests:
+## Authentication Security
 
-```bash
-cd backend
-node test_peks.js
-```
-
----
-
-# ⚠️ Technical Note
-
-This project implements a PEKS-inspired scheme using Elliptic Curve Diffie-Hellman (ECDH) with the secp256k1 curve through Node.js's built-in `crypto` module.
-
-The implementation preserves:
-- KeyGen
-- PEKS
-- Trapdoor
-- Test()
-
-while maintaining privacy-preserving searchable encryption properties suitable for secure document search workflows.
+* Access tokens are never persisted in localStorage
+* Refresh tokens rotate automatically
+* Session data clears on browser close
+* Secure logout invalidation implemented
+* Expiration handling included
+* Protected route middleware enabled
 
 ---
 
-# 📌 Summary
+## Encryption Security
 
-| Feature | Status |
-|---|---|
-| AES Document Encryption | ✅ |
-| PEKS Keyword Search | ✅ |
-| JWT Authentication | ✅ |
-| Secure File Uploads | ✅ |
-| Duplicate Detection | ✅ |
-| Responsive UI | ✅ |
-| Railway Deployment | ✅ |
-| Netlify Deployment | ✅ |
+* Secure IV generation
+* AES-256-CBC encryption
+* SHA-256 hashing
+* Trapdoor-based verification
+* No plaintext document storage
+* No raw keyword exposure
 
 ---
 
-# 👨‍💻 Author
+# Screenshots
 
-**Banoth Poojitha**
+Add screenshots for:
 
-GitHub:  
-https://github.com/Letitbe098/ppse-project
+* Login Page
+* Register Page
+* Dashboard
+* Upload Page
+* Search Page
+* Dark Theme
+* Light Theme
 
-# 📁 Project Structure
+---
 
+# Future Improvements
 
-```
-PPSE System
-├─ backend
-│  ├─ config
-│  │  └─ db.js
-│  ├─ crypt.js
-│  ├─ jwt.js
-│  ├─ middleware
-│  │  ├─ authMiddleware.js
-│  │  └─ rateLimiter.js
-│  ├─ migrations
-│  │  ├─ 002_auth_upgrade.sql
-│  │  └─ migration_003_final.sql
-│  ├─ package-lock.json
-│  ├─ package.json
-│  ├─ peks.js
-│  ├─ routes
-│  │  ├─ authRoutes.js
-│  │  └─ documentRoutes.js
-│  ├─ server.js
-│  ├─ test_peks.js
-│  └─ utils
-│     ├─ crypto.js
-│     └─ mailer.js
-├─ frontend
-│  ├─ eslint.config.js
-│  ├─ index.html
-│  ├─ package-lock.json
-│  ├─ package.json
-│  ├─ public
-│  │  ├─ vite.svg
-│  │  └─ _redirects
-│  ├─ src
-│  │  ├─ api.js
-│  │  ├─ App.jsx
-│  │  ├─ assets
-│  │  │  └─ hero-bg.png
-│  │  ├─ components
-│  │  │  └─ Navbar.jsx
-│  │  ├─ context
-│  │  │  ├─ AuthContext.jsx
-│  │  │  └─ ThemeContext.jsx
-│  │  ├─ index.css
-│  │  ├─ main.jsx
-│  │  └─ pages
-│  │     ├─ About.jsx
-│  │     ├─ ChangePassword.jsx
-│  │     ├─ Dashboard.jsx
-│  │     ├─ document.json
-│  │     ├─ ForgotPassword.jsx
-│  │     ├─ Login.jsx
-│  │     ├─ Register.jsx
-│  │     ├─ ResetPassword.jsx
-│  │     ├─ Search.jsx
-│  │     ├─ Upload.jsx
-│  │     └─ VerifyEmail.jsx
-│  ├─ vercel.json
-│  └─ vite.config.js
-├─ migrate_peks.sql
-├─ package-lock.json
-├─ package.json
-└─ README.md
+* Zero-Knowledge Storage Architecture
+* Multi-user Secure File Sharing
+* Search Ranking Algorithms
+* Search Analytics Dashboard
+* Advanced Searchable Encryption Schemes
+* Cryptographic Audit Logging
+* End-to-End Key Isolation
 
-```
+---
+
+# Author
+
+### Banoth Poojitha
+
+GitHub:
+https://github.com/poojitha-b-dev
+
+---
+

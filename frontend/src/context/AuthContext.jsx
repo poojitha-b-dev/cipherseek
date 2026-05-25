@@ -19,11 +19,11 @@ function isTokenExpired(token) {
 }
 
 function clearStorage() {
-  sessionStorage.removeItem("ppse_user");
-  sessionStorage.removeItem("ppse_refresh_token");
-  localStorage.removeItem("ppse_user");
-  localStorage.removeItem("ppse_token");
-  localStorage.removeItem("ppse_refresh_token");
+  sessionStorage.removeItem("cipherseek_user");
+  sessionStorage.removeItem("cipherseek_refresh_token");
+  localStorage.removeItem("cipherseek_user");
+  localStorage.removeItem("cipherseek_token");
+  localStorage.removeItem("cipherseek_refresh_token");
 }
 
 export function AuthProvider({ children }) {
@@ -31,11 +31,11 @@ export function AuthProvider({ children }) {
 
   const [user, setUser] = useState(() => {
     try {
-      if (localStorage.getItem("ppse_refresh_token") || localStorage.getItem("ppse_token")) {
+      if (localStorage.getItem("cipherseek_refresh_token") || localStorage.getItem("cipherseek_token")) {
         clearStorage();
         return null;
       }
-      return JSON.parse(sessionStorage.getItem("ppse_user") || "null");
+      return JSON.parse(sessionStorage.getItem("cipherseek_user") || "null");
     } catch {
       clearStorage();
       return null;
@@ -44,8 +44,8 @@ export function AuthProvider({ children }) {
 
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     try {
-      const storedUser = sessionStorage.getItem("ppse_user");
-      const rt = sessionStorage.getItem("ppse_refresh_token");
+      const storedUser = sessionStorage.getItem("cipherseek_user");
+      const rt = sessionStorage.getItem("cipherseek_refresh_token");
       if (!storedUser || !rt || isTokenExpired(rt)) { clearStorage(); return false; }
       return true;
     } catch {
@@ -56,8 +56,8 @@ export function AuthProvider({ children }) {
 
   const _persist = useCallback((userData, accessToken, refreshToken) => {
     accessTokenRef.current = accessToken;
-    sessionStorage.setItem("ppse_user", JSON.stringify(userData));
-    sessionStorage.setItem("ppse_refresh_token", refreshToken);
+    sessionStorage.setItem("cipherseek_user", JSON.stringify(userData));
+    sessionStorage.setItem("cipherseek_refresh_token", refreshToken);
     setUser(userData);
     setIsAuthenticated(true);
   }, []);
@@ -73,7 +73,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const _refreshAccessToken = useCallback(async () => {
-    const rt = sessionStorage.getItem("ppse_refresh_token");
+    const rt = sessionStorage.getItem("cipherseek_refresh_token");
     if (!rt || isTokenExpired(rt)) { _clear(); throw new Error("Session expired."); }
     const res = await fetch(`${API_URL}/api/auth/refresh`, {
       method: "POST",
@@ -83,9 +83,9 @@ export function AuthProvider({ children }) {
     if (!res.ok) { _clear(); throw new Error("Session expired."); }
     const data = await res.json();
     accessTokenRef.current = data.accessToken;
-    sessionStorage.setItem("ppse_refresh_token", data.refreshToken);
+    sessionStorage.setItem("cipherseek_refresh_token", data.refreshToken);
     if (data.user) {
-      sessionStorage.setItem("ppse_user", JSON.stringify(data.user));
+      sessionStorage.setItem("cipherseek_user", JSON.stringify(data.user));
       setUser(data.user);
     }
     return data.accessToken;

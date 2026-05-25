@@ -2,7 +2,7 @@ export default function About() {
   const modules = [
     { icon: "🖥", title: "User Interface", desc: "Secure web interface for login, encryption, and keyword search operations." },
     { icon: "🗄", title: "Data Storage", desc: "Encrypted ciphertext and keyword index stored in MySQL. Plaintext never persists." },
-    { icon: "🔑", title: "Key Management", desc: "RSA/ElGamal public-private key pair generation. Private key stored securely, public key distributed." },
+    { icon: "🔑", title: "Key Management", desc: "ECDH secp256k1 /PEKS-inspired searchable encryption public-private key pair generation. Private key stored securely, public key distributed." },
     { icon: "🔒", title: "Encryption & Indexing", desc: "AES-256-CBC for content. SHA-256 hashing for keywords. Encrypted index maps document IDs to keyword hashes." },
     { icon: "🚪", title: "Trapdoor Generation", desc: "Cryptographic token derived from private key + keyword hash. Sent to server to initiate search without revealing the keyword." },
     { icon: "🛡", title: "Access Control", desc: "Role-based control: Users manage their own data. Admins operate the system but cannot view or decrypt user content." },
@@ -13,7 +13,7 @@ export default function About() {
       step: "01",
       icon: "🔑",
       title: "Key Generation",
-      desc: "A public-private key pair is generated using RSA/ElGamal. The public key is used for encryption; the private key stays with the user and is never sent to the server.",
+      desc: "A public-private key pair is generated using ECDH secp256k1 /PEKS-inspired searchable encryption. The public key is used for encryption; the private key stays with the user and is never sent to the server.",
       tag: "Setup Phase",
     },
     {
@@ -51,7 +51,7 @@ export default function About() {
       <div className="page-header">
         <div>
           <h1 className="page-title">About the Project</h1>
-          <p className="page-sub">Privacy-Preserving Searchable Encryption for Web Services</p>
+          <p className="page-sub">Secure Searchable Encryption for Web Services</p>
         </div>
       </div>
 
@@ -64,7 +64,7 @@ export default function About() {
             RSA is secure but slow, while SSE is fast but vulnerable to frequency analysis attacks.
           </p>
           <p className="about-text">
-            PPSE resolves this by implementing a <strong>Public Key Encryption with Keyword Search (PEKS)</strong> scheme
+            CipherSeek resolves this by implementing a <strong>Public Key Encryption with Keyword Search (PEKS)</strong> scheme
             — users can search encrypted data using cryptographic trapdoors, without the server ever learning
             the actual keyword or document content.
           </p>
@@ -108,7 +108,7 @@ export default function About() {
         <div className="about-card wide">
           <h2 className="section-title">How It Works</h2>
           <p className="about-text" style={{ marginBottom: "1.25rem" }}>
-            PPSE operates in five distinct phases — from key setup to secure document retrieval —
+            CipherSeek operates in five distinct phases — from key setup to secure document retrieval —
             ensuring end-to-end privacy with zero plaintext exposure on the server.
           </p>
           <div className="hiw-steps">

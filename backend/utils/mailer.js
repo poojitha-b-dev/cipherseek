@@ -102,12 +102,12 @@ function buildHtmlEmail({ title, bodyHtml }) {
     <div class="card">
       <div class="header">
         <div class="logo">🔐</div>
-        <div class="app-name">PPSE</div>
+        <div class="app-name">CipherSeek</div>
         <div class="app-tagline">Privacy-Preserving Searchable Encryption</div>
       </div>
       <div class="body">${bodyHtml}</div>
       <div class="footer">
-        <p>You received this because an action was taken on your PPSE account.<br/>
+        <p>You received this because an action was taken on your CipherSeek account.<br/>
         If you did not initiate this, you can safely ignore this email.</p>
       </div>
     </div>
@@ -120,7 +120,7 @@ function buildHtmlEmail({ title, bodyHtml }) {
 async function sendMail({ to, subject, html, text }) {
   const payload = {
     sender: {
-      name:  'PPSE Security',
+      name:  'CipherSeek Security',
       email: process.env.MAIL_USER,
     },
     to: [{ email: to }],
@@ -144,21 +144,21 @@ async function sendVerificationEmail(to, username, token) {
   const url = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
   await sendMail({
     to,
-    subject: 'Verify your PPSE email address',
+    subject: 'Verify your CipherSeek email address',
     html: buildHtmlEmail({
-      title: 'Verify your PPSE email',
+      title: 'Verify your CipherSeek email',
       bodyHtml: `
         <h2>Verify your email</h2>
         <p>Hi <strong style="color:#e8eaf6">${username}</strong>,</p>
-        <p>Thanks for joining PPSE. Click below to verify your email and activate your account.
+        <p>Thanks for joining CipherSeek. Click below to verify your email and activate your account.
         This link expires in <strong style="color:#e8eaf6">24 hours</strong>.</p>
         <a href="${url}" class="cta-btn">Verify Email Address</a>
         <p style="font-size:13px;color:#4a5568;text-align:center;margin-bottom:8px">Button not working? Copy this link:</p>
         <div class="url-fallback">${url}</div>
-        <div class="warning">⚠️ If you did not create a PPSE account, no action is needed.</div>
+        <div class="warning">⚠️ If you did not create a CipherSeek account, no action is needed.</div>
       `,
     }),
-    text: `Verify your PPSE email\n\nHi ${username},\n\nVerify here:\n${url}\n\nExpires in 24 hours.`,
+    text: `Verify your CipherSeek email\n\nHi ${username},\n\nVerify here:\n${url}\n\nExpires in 24 hours.`,
   });
 }
 
@@ -167,13 +167,13 @@ async function sendPasswordResetEmail(to, username, token) {
   const url = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
   await sendMail({
     to,
-    subject: 'Reset your PPSE password',
+    subject: 'Reset your CipherSeek password',
     html: buildHtmlEmail({
-      title: 'Reset your PPSE password',
+      title: 'Reset your CipherSeek password',
       bodyHtml: `
         <h2>Reset your password</h2>
         <p>Hi <strong style="color:#e8eaf6">${username}</strong>,</p>
-        <p>We received a request to reset your PPSE password. Click below to set a new password.
+        <p>We received a request to reset your CipherSeek password. Click below to set a new password.
         This link expires in <strong style="color:#e8eaf6">1 hour</strong>.</p>
         <a href="${url}" class="cta-btn">Reset Password</a>
         <p style="font-size:13px;color:#4a5568;text-align:center;margin-bottom:8px">Button not working? Copy this link:</p>
@@ -181,7 +181,7 @@ async function sendPasswordResetEmail(to, username, token) {
         <div class="warning">⚠️ If you did not request this, ignore this email.</div>
       `,
     }),
-    text: `Reset your PPSE password\n\nHi ${username},\n\nReset here:\n${url}\n\nExpires in 1 hour.`,
+    text: `Reset your CipherSeek password\n\nHi ${username},\n\nReset here:\n${url}\n\nExpires in 1 hour.`,
   });
 }
 
