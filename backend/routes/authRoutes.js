@@ -1,10 +1,10 @@
 // backend/routes/authRoutes.js
 
-const express  = require('express');
-const bcrypt   = require('bcryptjs');
-const jwt      = require('jsonwebtoken');
-const crypto   = require('crypto');
-const dns      = require('dns').promises;
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const dns = require('dns').promises;
 const connection = require('../config/db');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/mailer');
 const { authenticateUser } = require('../middleware/authMiddleware');
@@ -36,18 +36,18 @@ const USERNAME_RE = /^[a-zA-Z0-9._]+$/;
 // Lightweight disposable-domain blocklist
 // Add more domains as needed — this covers the most common throwaway providers
 const DISPOSABLE_DOMAINS = new Set([
-  'mailinator.com','guerrillamail.com','tempmail.com','throwam.com',
-  'sharklasers.com','guerrillamailblock.com','grr.la','guerrillamail.info',
-  'spam4.me','yopmail.com','yopmail.fr','cool.fr.nf','jetable.fr.nf',
-  'nospam.ze.tc','nomail.xl.cx','mega.zik.dj','speed.1s.fr','courriel.fr.nf',
-  'moncourrier.fr.nf','monemail.fr.nf','monmail.fr.nf','trashmail.com',
-  'trashmail.at','trashmail.io','trashmail.me','trashmail.net',
-  'dispostable.com','maildrop.cc','mailnull.com','spamgourmet.com',
-  'spamgourmet.net','spamgourmet.org','spamgourmet.com','binkmail.com',
-  'bobmail.info','chammy.info','devnullmail.com','letthemeatspam.com',
-  'mailnew.com','no-spam.ws','obobbo.com','spamfree24.org','spoofmail.de',
-  'tempe-mail.com','tempinbox.com','trashdevil.com','trashdevil.de',
-  'wegwerfmail.de','wegwerfmail.net','wegwerfmail.org',
+  'mailinator.com', 'guerrillamail.com', 'tempmail.com', 'throwam.com',
+  'sharklasers.com', 'guerrillamailblock.com', 'grr.la', 'guerrillamail.info',
+  'spam4.me', 'yopmail.com', 'yopmail.fr', 'cool.fr.nf', 'jetable.fr.nf',
+  'nospam.ze.tc', 'nomail.xl.cx', 'mega.zik.dj', 'speed.1s.fr', 'courriel.fr.nf',
+  'moncourrier.fr.nf', 'monemail.fr.nf', 'monmail.fr.nf', 'trashmail.com',
+  'trashmail.at', 'trashmail.io', 'trashmail.me', 'trashmail.net',
+  'dispostable.com', 'maildrop.cc', 'mailnull.com', 'spamgourmet.com',
+  'spamgourmet.net', 'spamgourmet.org', 'spamgourmet.com', 'binkmail.com',
+  'bobmail.info', 'chammy.info', 'devnullmail.com', 'letthemeatspam.com',
+  'mailnew.com', 'no-spam.ws', 'obobbo.com', 'spamfree24.org', 'spoofmail.de',
+  'tempe-mail.com', 'tempinbox.com', 'trashdevil.com', 'trashdevil.de',
+  'wegwerfmail.de', 'wegwerfmail.net', 'wegwerfmail.org',
 ]);
 
 async function isFakeDomain(email) {
@@ -72,7 +72,7 @@ router.post('/register', authLimiter, async (req, res) => {
     return res.status(400).json({ message: 'All fields are required.' });
   }
 
-  const trimUser  = username.trim();
+  const trimUser = username.trim();
   const trimEmail = email.toLowerCase().trim();
 
   // Username format
@@ -125,9 +125,9 @@ router.post('/register', authLimiter, async (req, res) => {
       }
     }
 
-    const passwordHash  = await bcrypt.hash(password, 12);
-    const verifyToken   = crypto.randomBytes(32).toString('hex');
-    const verifyExpiry  = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const passwordHash = await bcrypt.hash(password, 12);
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const verifyExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await dbQuery(
       `INSERT INTO users
@@ -138,8 +138,9 @@ router.post('/register', authLimiter, async (req, res) => {
       [trimUser, trimEmail, passwordHash, verifyToken, verifyExpiry]
     );
 
+    // After — logs the full error so Railway shows the SMTP code
     sendVerificationEmail(trimEmail, trimUser, verifyToken).catch(err =>
-      console.error('Verification email failed:', err.message)
+      console.error('Verification email failed:', err.code, err.message, err.response || '')
     );
 
     return res.status(201).json({ message: 'Account created. Please check your email to verify.' });
@@ -198,7 +199,7 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
     }
 
     const user = rows[0];
-    const now  = new Date();
+    const now = new Date();
     const resetAt = user.resend_reset_at ? new Date(user.resend_reset_at) : null;
     let count = (!resetAt || now > resetAt) ? 0 : (user.resend_count || 0);
 
@@ -209,10 +210,10 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
       });
     }
 
-    const newToken  = crypto.randomBytes(32).toString('hex');
+    const newToken = crypto.randomBytes(32).toString('hex');
     const newExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const newCount  = count + 1;
-    const newReset  = (resetAt && now < resetAt) ? resetAt : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const newCount = count + 1;
+    const newReset = (resetAt && now < resetAt) ? resetAt : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await dbQuery(
       `UPDATE users SET verification_token = ?, verification_expires = ?,
@@ -270,10 +271,10 @@ router.post('/login', authLimiter, async (req, res) => {
       });
     }
 
-    const accessToken  = signAccessToken(user.id);
+    const accessToken = signAccessToken(user.id);
     const refreshToken = signRefreshToken(user.id);
-    const refreshHash  = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    const refreshExp   = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const refreshExp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await dbQuery(
       'UPDATE users SET refresh_token_hash = ?, refresh_token_expires = ?, last_login = NOW() WHERE id = ?',
@@ -316,10 +317,10 @@ router.post('/refresh', async (req, res) => {
     }
 
     const user = rows[0];
-    const newAccess  = signAccessToken(user.id);
+    const newAccess = signAccessToken(user.id);
     const newRefresh = signRefreshToken(user.id);
-    const newHash    = crypto.createHash('sha256').update(newRefresh).digest('hex');
-    const newExp     = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const newHash = crypto.createHash('sha256').update(newRefresh).digest('hex');
+    const newExp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await dbQuery(
       'UPDATE users SET refresh_token_hash = ?, refresh_token_expires = ? WHERE id = ?',
@@ -390,10 +391,10 @@ router.post('/forgot-password', passwordLimiter, async (req, res) => {
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetHash  = crypto.createHash('sha256').update(resetToken).digest('hex');
-    const resetExp   = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    const newCount   = count + 1;
-    const newReset   = (resetAt && now < resetAt) ? resetAt : new Date(Date.now() + 60 * 60 * 1000);
+    const resetHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetExp = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const newCount = count + 1;
+    const newReset = (resetAt && now < resetAt) ? resetAt : new Date(Date.now() + 60 * 60 * 1000);
 
     await dbQuery(
       `UPDATE users SET reset_token_hash = ?, reset_token_expires = ?,

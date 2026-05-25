@@ -143,129 +143,6 @@ Test():
   verify ciphertext integrity
 ```
 
----
-
-# 📁 Project Structure
-
-```
-PPSE System
-├─ backend
-│  ├─ config
-│  │  └─ db.js
-│  ├─ crypt.js
-│  ├─ jwt.js
-│  ├─ middleware
-│  │  ├─ authMiddleware.js
-│  │  └─ rateLimiter.js
-│  ├─ migrations
-│  │  └─ 002_auth_upgrade.sql
-│  ├─ package-lock.json
-│  ├─ package.json
-│  ├─ peks.js
-│  ├─ routes
-│  │  ├─ authRoutes.js
-│  │  └─ documentRoutes.js
-│  ├─ server.js
-│  ├─ test_peks.js
-│  └─ utils
-│     ├─ crypto.js
-│     └─ mailer.js
-├─ frontend
-│  ├─ eslint.config.js
-│  ├─ index.html
-│  ├─ package-lock.json
-│  ├─ package.json
-│  ├─ public
-│  │  ├─ vite.svg
-│  │  └─ _redirects
-│  ├─ src
-│  │  ├─ App.jsx
-│  │  ├─ assets
-│  │  │  └─ hero-bg.png
-│  │  ├─ components
-│  │  │  └─ Navbar.jsx
-│  │  ├─ context
-│  │  │  ├─ AuthContext.jsx
-│  │  │  └─ ThemeContext.jsx
-│  │  ├─ index.css
-│  │  ├─ main.jsx
-│  │  └─ pages
-│  │     ├─ About.jsx
-│  │     ├─ ChangePassword.jsx
-│  │     ├─ Dashboard.jsx
-│  │     ├─ document.json
-│  │     ├─ ForgotPassword.jsx
-│  │     ├─ Login.jsx
-│  │     ├─ Register.jsx
-│  │     ├─ ResetPassword.jsx
-│  │     ├─ Search.jsx
-│  │     ├─ Upload.jsx
-│  │     └─ VerifyEmail.jsx
-│  └─ vite.config.js
-├─ migrate_peks.sql
-└─ README.md
-
-```
-```
-PPSE System
-├─ backend
-│  ├─ config
-│  │  └─ db.js
-│  ├─ crypt.js
-│  ├─ jwt.js
-│  ├─ middleware
-│  │  ├─ authMiddleware.js
-│  │  └─ rateLimiter.js
-│  ├─ migrations
-│  │  └─ 002_auth_upgrade.sql
-│  ├─ package-lock.json
-│  ├─ package.json
-│  ├─ peks.js
-│  ├─ routes
-│  │  ├─ authRoutes.js
-│  │  └─ documentRoutes.js
-│  ├─ server.js
-│  ├─ test_peks.js
-│  └─ utils
-│     ├─ crypto.js
-│     └─ mailer.js
-├─ frontend
-│  ├─ eslint.config.js
-│  ├─ index.html
-│  ├─ package-lock.json
-│  ├─ package.json
-│  ├─ public
-│  │  ├─ vite.svg
-│  │  └─ _redirects
-│  ├─ src
-│  │  ├─ api.js
-│  │  ├─ App.jsx
-│  │  ├─ assets
-│  │  │  └─ hero-bg.png
-│  │  ├─ components
-│  │  │  └─ Navbar.jsx
-│  │  ├─ context
-│  │  │  ├─ AuthContext.jsx
-│  │  │  └─ ThemeContext.jsx
-│  │  ├─ index.css
-│  │  ├─ main.jsx
-│  │  └─ pages
-│  │     ├─ About.jsx
-│  │     ├─ ChangePassword.jsx
-│  │     ├─ Dashboard.jsx
-│  │     ├─ document.json
-│  │     ├─ ForgotPassword.jsx
-│  │     ├─ Login.jsx
-│  │     ├─ Register.jsx
-│  │     ├─ ResetPassword.jsx
-│  │     ├─ Search.jsx
-│  │     ├─ Upload.jsx
-│  │     └─ VerifyEmail.jsx
-│  └─ vite.config.js
-├─ migrate_peks.sql
-└─ README.md
-
-```
 
 ---
 
@@ -417,3 +294,67 @@ while maintaining privacy-preserving searchable encryption properties suitable f
 
 GitHub:  
 https://github.com/Letitbe098/ppse-project
+
+# 📁 Project Structure
+
+```
+PPSE System
+├─ backend
+│  ├─ config
+│  │  └─ db.js
+│  ├─ crypt.js
+│  ├─ jwt.js
+│  ├─ middleware
+│  │  ├─ authMiddleware.js
+│  │  └─ rateLimiter.js
+│  ├─ migrations
+│  │  ├─ 002_auth_upgrade.sql
+│  │  └─ migration_003_final.sql
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ peks.js
+│  ├─ routes
+│  │  ├─ authRoutes.js
+│  │  └─ documentRoutes.js
+│  ├─ server.js
+│  ├─ test_peks.js
+│  └─ utils
+│     ├─ crypto.js
+│     └─ mailer.js
+├─ frontend
+│  ├─ eslint.config.js
+│  ├─ index.html
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ public
+│  │  ├─ vite.svg
+│  │  └─ _redirects
+│  ├─ src
+│  │  ├─ api.js
+│  │  ├─ App.jsx
+│  │  ├─ assets
+│  │  │  └─ hero-bg.png
+│  │  ├─ components
+│  │  │  └─ Navbar.jsx
+│  │  ├─ context
+│  │  │  ├─ AuthContext.jsx
+│  │  │  └─ ThemeContext.jsx
+│  │  ├─ index.css
+│  │  ├─ main.jsx
+│  │  └─ pages
+│  │     ├─ About.jsx
+│  │     ├─ ChangePassword.jsx
+│  │     ├─ Dashboard.jsx
+│  │     ├─ document.json
+│  │     ├─ ForgotPassword.jsx
+│  │     ├─ Login.jsx
+│  │     ├─ Register.jsx
+│  │     ├─ ResetPassword.jsx
+│  │     ├─ Search.jsx
+│  │     ├─ Upload.jsx
+│  │     └─ VerifyEmail.jsx
+│  └─ vite.config.js
+├─ migrate_peks.sql
+└─ README.md
+
+```
