@@ -1,37 +1,38 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function CooldownTimer({ unlocksAt, onUnlocked }) {
-const [remaining, setRemaining] = useState("");
+  const [remaining, setRemaining] = useState("");
+  const onUnlockedRef = useRef(onUnlocked);
 
-useEffect(() => {
-const tick = () => {
-const diff = unlocksAt - Date.now();
+  useEffect(() => {
+    onUnlockedRef.current = onUnlocked;
+  }, [onUnlocked]);
 
-```
-  if (diff <= 0) {
-    onUnlocked();
-    return;
-  }
+  useEffect(() => {
+    const tick = () => {
+      const diff = unlocksAt - Date.now();
 
-  const m = Math.floor(diff / 60000);
-  const s = Math.floor((diff % 60000) / 1000);
+      if (diff <= 0) {
+        onUnlockedRef.current();
+        return;
+      }
 
-  setRemaining(`${m}:${s.toString().padStart(2, "0")}`);
-};
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
 
-tick();
+      setRemaining(`${m}:${s.toString().padStart(2, "0")}`);
+    };
 
-const id = setInterval(tick, 1000);
+    tick();
 
-return () => clearInterval(id);
-```
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [unlocksAt]);
 
-}, [unlocksAt, onUnlocked]);
-
-return (
-<p style={{ fontSize: 12, color: "var(--text-2)", marginTop: 6 }}>
-Try again in{" "}
-<strong style={{ color: "var(--text)" }}>
-{remaining} </strong> </p>
-);
+  return (
+    <p style={{ fontSize: 12, color: "var(--text-2)", marginTop: 6 }}>
+      Try again in{" "}
+      <strong style={{ color: "var(--text)" }}>{remaining}</strong>
+    </p>
+  );
 }
