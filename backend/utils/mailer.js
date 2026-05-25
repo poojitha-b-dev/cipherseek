@@ -1,20 +1,22 @@
 // backend/utils/mailer.js
-const SibApiV3Sdk = require('@getbrevo/brevo');
+const brevo = require('@getbrevo/brevo');
 
-const client = SibApiV3Sdk.ApiClient.instance;
+const transactionalApi = new brevo.TransactionalEmailsApi();
 
-client.authentications['api-key'].apiKey =
-  process.env.BREVO_API_KEY;
+transactionalApi.setApiKey(
+  brevo.TransactionalEmailsApiApiKeys.apiKey,
+  process.env.BREVO_API_KEY
+);
 
-const transactionalApi =
-  new SibApiV3Sdk.TransactionalEmailsApi();
 async function verifyMailer() {
   if (!process.env.BREVO_API_KEY) {
     console.error('❌ BREVO_API_KEY is not set.');
     return;
   }
-  console.log('✅ Brevo mailer ready. Sending as:', process.env.MAIL_FROM);
+
+  console.log('✅ Brevo mailer ready.');
 }
+
 verifyMailer();
 
 function buildHtmlEmail({ title, bodyHtml }) {
@@ -50,10 +52,16 @@ function buildHtmlEmail({ title, bodyHtml }) {
         <div class="app-name">PPSE</div>
         <div class="app-tagline">Privacy-Preserving Searchable Encryption</div>
       </div>
-      <div class="body">${bodyHtml}</div>
+
+      <div class="body">
+        ${bodyHtml}
+      </div>
+
       <div class="footer">
-        <p>You received this because an action was taken on your PPSE account.<br/>
-        If you did not initiate this, you can safely ignore this email.</p>
+        <p>
+          You received this because an action was taken on your PPSE account.<br/>
+          If you did not initiate this, you can safely ignore this email.
+        </p>
       </div>
     </div>
   </div>
@@ -62,68 +70,116 @@ function buildHtmlEmail({ title, bodyHtml }) {
 }
 
 async function sendMail({ to, subject, html, text }) {
-  const fromEmail = process.env.MAIL_USER;
-  const fromName  = 'PPSE Security';
+  const email = new brevo.SendSmtpEmail();
 
-  const email = new Brevo.SendSmtpEmail();
-  email.sender      = { name: fromName, email: fromEmail };
-  email.to          = [{ email: to }];
-  email.subject     = subject;
+  email.sender = {
+    name: 'PPSE Security',
+    email: process.env.MAIL_USER
+  };
+
+  email.to = [{ email: to }];
+
+  email.subject = subject;
   email.htmlContent = html;
   email.textContent = text;
 
   try {
     const result = await transactionalApi.sendTransacEmail(email);
-    console.log(`✅ Email sent → ${to} | messageId: ${result.messageId}`);
+
+    console.log(`✅ Email sent to ${to}`);
+
     return result;
   } catch (err) {
-    console.error(`❌ Email send FAILED → ${to}:`, err.message);
+    console.error('❌ Email send failed:', err.message);
     throw err;
   }
 }
 
 async function sendVerificationEmail(to, username, token) {
-  const url = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+  const url =
+    `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+
   await sendMail({
     to,
     subject: 'Verify your PPSE email address',
+
     html: buildHtmlEmail({
-      title: 'Verify your PPSE email',
+      title: 'Verify Email',
+
       bodyHtml: `
         <h2>Verify your email</h2>
-        <p>Hi <strong style="color:#e8eaf6">${username}</strong>,</p>
-        <p>Thanks for joining PPSE. Click below to verify your email and activate your account.
-        This link expires in <strong style="color:#e8eaf6">24 hours</strong>.</p>
-        <a href="${url}" class="cta-btn">Verify Email Address</a>
-        <p style="font-size:13px;color:#4a5568;text-align:center;margin-bottom:8px">Button not working? Copy this link:</p>
-        <div class="url-fallback">${url}</div>
-        <div class="warning">⚠️ If you did not create a PPSE account, no action is needed.</div>
-      `,
+
+        <p>
+          Hi <strong style="color:#e8eaf6">${username}</strong>,
+        </p>
+
+        <p>
+          Click below to verify your email address.
+          This link expires in 24 hours.
+        </p>
+
+        <a href="${url}" class="cta-btn">
+          Verify Email Address
+        </a>
+
+        <div class="url-fallback">
+          ${url}
+        </div>
+      `
     }),
-    text: `Hi ${username},\n\nVerify your email:\n${url}\n\nExpires in 24 hours.`,
+
+    text:
+`Hi ${username},
+
+Verify your email:
+
+${url}`
   });
 }
 
 async function sendPasswordResetEmail(to, username, token) {
-  const url = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+  const url =
+    `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
   await sendMail({
     to,
     subject: 'Reset your PPSE password',
+
     html: buildHtmlEmail({
-      title: 'Reset your PPSE password',
+      title: 'Reset Password',
+
       bodyHtml: `
         <h2>Reset your password</h2>
-        <p>Hi <strong style="color:#e8eaf6">${username}</strong>,</p>
-        <p>We received a request to reset your PPSE password. Click below to set a new password.
-        This link expires in <strong style="color:#e8eaf6">1 hour</strong>.</p>
-        <a href="${url}" class="cta-btn">Reset Password</a>
-        <p style="font-size:13px;color:#4a5568;text-align:center;margin-bottom:8px">Button not working? Copy this link:</p>
-        <div class="url-fallback">${url}</div>
-        <div class="warning">⚠️ If you did not request this, ignore this email.</div>
-      `,
+
+        <p>
+          Hi <strong style="color:#e8eaf6">${username}</strong>,
+        </p>
+
+        <p>
+          Click below to reset your password.
+          This link expires in 1 hour.
+        </p>
+
+        <a href="${url}" class="cta-btn">
+          Reset Password
+        </a>
+
+        <div class="url-fallback">
+          ${url}
+        </div>
+      `
     }),
-    text: `Hi ${username},\n\nReset your password:\n${url}\n\nExpires in 1 hour.`,
+
+    text:
+`Hi ${username},
+
+Reset your password:
+
+${url}`
   });
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail };
+module.exports = {
+  sendVerificationEmail,
+  sendPasswordResetEmail
+};
