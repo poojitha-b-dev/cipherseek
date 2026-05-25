@@ -1,19 +1,20 @@
 // backend/utils/mailer.js
-const { Resend } = require('resend');
+const Brevo = require('@getbrevo/brevo');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const client = Brevo.ApiClient.instance;
+client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
 
-// Startup check
+const transactionalApi = new Brevo.TransactionalEmailsApi();
+
 async function verifyMailer() {
-  if (!process.env.RESEND_API_KEY) {
-    console.error('❌ RESEND_API_KEY is not set in environment variables.');
+  if (!process.env.BREVO_API_KEY) {
+    console.error('❌ BREVO_API_KEY is not set.');
     return;
   }
-  console.log('✅ Resend mailer ready. Sending as:', process.env.MAIL_FROM || 'onboarding@resend.dev');
+  console.log('✅ Brevo mailer ready. Sending as:', process.env.MAIL_FROM);
 }
 verifyMailer();
 
-// ── HTML email template ────────────────────────────────────────────
 function buildHtmlEmail({ title, bodyHtml }) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -58,24 +59,27 @@ function buildHtmlEmail({ title, bodyHtml }) {
 </html>`;
 }
 
-// ── Core send helper ───────────────────────────────────────────────
 async function sendMail({ to, subject, html, text }) {
-  const from = process.env.MAIL_FROM || 'PPSE Security <onboarding@resend.dev>';
+  const fromEmail = process.env.MAIL_USER;
+  const fromName  = 'PPSE Security';
+
+  const email = new Brevo.SendSmtpEmail();
+  email.sender      = { name: fromName, email: fromEmail };
+  email.to          = [{ email: to }];
+  email.subject     = subject;
+  email.htmlContent = html;
+  email.textContent = text;
+
   try {
-    const { data, error } = await resend.emails.send({ from, to, subject, html, text });
-    if (error) {
-      console.error(`❌ Email send FAILED → ${to}`, error);
-      throw new Error(error.message);
-    }
-    console.log(`✅ Email sent → ${to} | id: ${data.id}`);
-    return data;
+    const result = await transactionalApi.sendTransacEmail(email);
+    console.log(`✅ Email sent → ${to} | messageId: ${result.messageId}`);
+    return result;
   } catch (err) {
     console.error(`❌ Email send FAILED → ${to}:`, err.message);
     throw err;
   }
 }
 
-// ── Verification email ─────────────────────────────────────────────
 async function sendVerificationEmail(to, username, token) {
   const url = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
   await sendMail({
@@ -94,11 +98,10 @@ async function sendVerificationEmail(to, username, token) {
         <div class="warning">⚠️ If you did not create a PPSE account, no action is needed.</div>
       `,
     }),
-    text: `Verify your PPSE email\n\nHi ${username},\n\nClick to verify:\n${url}\n\nExpires in 24 hours.`,
+    text: `Hi ${username},\n\nVerify your email:\n${url}\n\nExpires in 24 hours.`,
   });
 }
 
-// ── Password reset email ───────────────────────────────────────────
 async function sendPasswordResetEmail(to, username, token) {
   const url = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
   await sendMail({
@@ -114,10 +117,10 @@ async function sendPasswordResetEmail(to, username, token) {
         <a href="${url}" class="cta-btn">Reset Password</a>
         <p style="font-size:13px;color:#4a5568;text-align:center;margin-bottom:8px">Button not working? Copy this link:</p>
         <div class="url-fallback">${url}</div>
-        <div class="warning">⚠️ If you did not request this, ignore this email. The link expires automatically.</div>
+        <div class="warning">⚠️ If you did not request this, ignore this email.</div>
       `,
     }),
-    text: `Reset your PPSE password\n\nHi ${username},\n\nReset link:\n${url}\n\nExpires in 1 hour.`,
+    text: `Hi ${username},\n\nReset your password:\n${url}\n\nExpires in 1 hour.`,
   });
 }
 
