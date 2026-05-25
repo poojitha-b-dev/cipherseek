@@ -1,9 +1,8 @@
 // frontend/src/context/AuthContext.jsx
 //
-// JWT is stored ONLY in:
-//   - accessToken  → React ref (in-memory, gone on page close)
-//   - refreshToken → sessionStorage (cleared on tab/browser close)
-// No JWT is ever written to localStorage.
+// JWT stored ONLY in:
+//   accessToken  → React ref (memory, gone on page close)
+//   refreshToken → sessionStorage (cleared on tab/browser close)
 
 import { createContext, useContext, useState, useCallback, useRef } from "react";
 import API_URL from "../api";
@@ -22,18 +21,16 @@ function isTokenExpired(token) {
 function clearStorage() {
   sessionStorage.removeItem("ppse_user");
   sessionStorage.removeItem("ppse_refresh_token");
-  // Also wipe any old localStorage keys from previous versions
   localStorage.removeItem("ppse_user");
   localStorage.removeItem("ppse_token");
   localStorage.removeItem("ppse_refresh_token");
 }
 
 export function AuthProvider({ children }) {
-  const accessTokenRef = useRef(null); // memory only — gone on close
+  const accessTokenRef = useRef(null);
 
   const [user, setUser] = useState(() => {
     try {
-      // Wipe any stale localStorage session on first load
       if (localStorage.getItem("ppse_refresh_token") || localStorage.getItem("ppse_token")) {
         clearStorage();
         return null;
@@ -65,6 +62,9 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(true);
   }, []);
 
+  // KEY FIX: _clear is synchronous — it updates React state immediately.
+  // This means the UI re-renders to the login screen in the same event loop
+  // tick, with no async gap that could leave a blank white page.
   const _clear = useCallback(() => {
     accessTokenRef.current = null;
     clearStorage();
@@ -75,22 +75,22 @@ export function AuthProvider({ children }) {
   const _refreshAccessToken = useCallback(async () => {
     const rt = sessionStorage.getItem("ppse_refresh_token");
     if (!rt || isTokenExpired(rt)) { _clear(); throw new Error("Session expired."); }
-
-    const res  = await fetch(`${API_URL}/api/auth/refresh`, {
+    const res = await fetch(`${API_URL}/api/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken: rt }),
     });
     if (!res.ok) { _clear(); throw new Error("Session expired."); }
-
     const data = await res.json();
     accessTokenRef.current = data.accessToken;
     sessionStorage.setItem("ppse_refresh_token", data.refreshToken);
-    if (data.user) { sessionStorage.setItem("ppse_user", JSON.stringify(data.user)); setUser(data.user); }
+    if (data.user) {
+      sessionStorage.setItem("ppse_user", JSON.stringify(data.user));
+      setUser(data.user);
+    }
     return data.accessToken;
   }, [_clear]);
 
-  // ── login ─────────────────────────────────────────────────────────────────
   const login = useCallback(async (email, password) => {
     const res  = await fetch(`${API_URL}/api/auth/login`, {
       method: "POST",
@@ -100,16 +100,15 @@ export function AuthProvider({ children }) {
     const data = await res.json();
     if (!res.ok) {
       const err = new Error(data.message || "Login failed.");
-      err.errorType        = data.errorType || "unknown";
+      err.errorType         = data.errorType || "unknown";
       err.needsVerification = data.needsVerification || false;
-      err.email            = data.email || email;
+      err.email             = data.email || email;
       throw err;
     }
     _persist(data.user, data.accessToken, data.refreshToken);
     return data;
   }, [_persist]);
 
-  // ── register ──────────────────────────────────────────────────────────────
   const register = useCallback(async (username, email, password) => {
     const res  = await fetch(`${API_URL}/api/auth/register`, {
       method: "POST",
@@ -125,20 +124,23 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  // ── logout — unlimited ────────────────────────────────────────────────────
-  const logout = useCallback(async () => {
-    try {
-      if (accessTokenRef.current) {
-        await fetch(`${API_URL}/api/auth/logout`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessTokenRef.current}` },
-        });
-      }
-    } catch { /* ignore */ }
+  // KEY FIX: Clear local state FIRST (synchronous, instant UI update),
+  // THEN fire the backend logout in the background.
+  // Old version: awaited the API call before clearing state → async gap
+  // → React re-rendered with neither auth nor unauth tree → blank page.
+  const logout = useCallback(() => {
+    const tokenToRevoke = accessTokenRef.current;
+    // 1. Clear state immediately — UI shows login screen right away
     _clear();
+    // 2. Tell backend to revoke the refresh token (fire and forget)
+    if (tokenToRevoke) {
+      fetch(`${API_URL}/api/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tokenToRevoke}` },
+      }).catch(() => { /* ignore — user is already logged out on client */ });
+    }
   }, [_clear]);
 
-  // ── resendVerification ────────────────────────────────────────────────────
   const resendVerification = useCallback(async (email) => {
     const res  = await fetch(`${API_URL}/api/auth/resend-verification`, {
       method: "POST",
@@ -154,7 +156,6 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  // ── forgotPassword ────────────────────────────────────────────────────────
   const forgotPassword = useCallback(async (email) => {
     const res  = await fetch(`${API_URL}/api/auth/forgot-password`, {
       method: "POST",
@@ -171,7 +172,6 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  // ── resetPassword ─────────────────────────────────────────────────────────
   const resetPassword = useCallback(async (token, password) => {
     const res  = await fetch(`${API_URL}/api/auth/reset-password`, {
       method: "POST",
@@ -183,7 +183,6 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  // ── changePassword ────────────────────────────────────────────────────────
   const changePassword = useCallback(async (currentPassword, newPassword) => {
     let token = accessTokenRef.current;
     if (!token || isTokenExpired(token)) token = await _refreshAccessToken();
@@ -197,7 +196,6 @@ export function AuthProvider({ children }) {
     return data;
   }, [_refreshAccessToken]);
 
-  // ── authFetch ─────────────────────────────────────────────────────────────
   const authFetch = useCallback(async (url, options = {}) => {
     let token = accessTokenRef.current;
     if (!token || isTokenExpired(token)) token = await _refreshAccessToken();

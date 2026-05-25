@@ -28,23 +28,19 @@ function AppRoutes() {
   const [page, setPage]     = useState("dashboard");
   const [route]             = useState(getCurrentRoute);
 
-  // FIX: useEffect MUST be at the top — before any conditional returns.
-  // Previously it was placed after an early return, which React forbids
-  // (Rules of Hooks). This caused a silent crash → blank white page on
-  // login and logout.
+  // Must be before any conditional returns (Rules of Hooks).
+  // Resets page state when auth changes so we never show a stale screen.
   useEffect(() => {
     if (isAuthenticated) {
-      // Just logged in — make sure we land on dashboard, not a stale auth page
       if (["login", "register", "forgot-password"].includes(page)) {
         setPage("dashboard");
       }
     } else {
-      // Just logged out — reset to login view
       setPage("login");
     }
   }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Email-link routes — work regardless of auth state ─────────────
+  // Email-link routes — work regardless of auth state
   if (route.path === "/verify-email") {
     return <VerifyEmail token={route.params.get("token")} />;
   }
@@ -52,10 +48,17 @@ function AppRoutes() {
     return <ResetPassword token={route.params.get("token")} />;
   }
   if (route.path === "/forgot-password") {
-    return <ForgotPassword onBack={() => { window.history.replaceState({}, "", "/"); setPage("login"); }} />;
+    return (
+      <ForgotPassword
+        onBack={() => {
+          window.history.replaceState({}, "", "/");
+          setPage("login");
+        }}
+      />
+    );
   }
 
-  // ── Not logged in ──────────────────────────────────────────────────
+  // Not logged in
   if (!isAuthenticated) {
     if (page === "forgot-password") {
       return <ForgotPassword onBack={() => setPage("login")} />;
@@ -71,7 +74,7 @@ function AppRoutes() {
     );
   }
 
-  // ── Logged in ──────────────────────────────────────────────────────
+  // Logged in
   return (
     <div className="app-shell">
       <Navbar page={page} setPage={setPage} />
