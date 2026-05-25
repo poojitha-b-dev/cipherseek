@@ -1,11 +1,13 @@
 // backend/utils/mailer.js
-const Brevo = require('@getbrevo/brevo');
+const SibApiV3Sdk = require('@getbrevo/brevo');
 
-const client = Brevo.ApiClient.instance;
-client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+const client = SibApiV3Sdk.ApiClient.instance;
 
-const transactionalApi = new Brevo.TransactionalEmailsApi();
+client.authentications['api-key'].apiKey =
+  process.env.BREVO_API_KEY;
 
+const transactionalApi =
+  new SibApiV3Sdk.TransactionalEmailsApi();
 async function verifyMailer() {
   if (!process.env.BREVO_API_KEY) {
     console.error('❌ BREVO_API_KEY is not set.');
