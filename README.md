@@ -68,6 +68,7 @@ The system prevents direct exposure of:
 * Forgot Password Flow
 * Password Reset Flow
 * Change Password Functionality
+* Change Username Functionality
 * Disposable Email Detection
 * Custom Rate Limiting
 * Protected API Routes
@@ -337,6 +338,7 @@ POST   /api/auth/refresh
 POST   /api/auth/forgot-password
 POST   /api/auth/reset-password
 POST   /api/auth/change-password
+POST   /api/auth/change-username
 POST   /api/auth/resend-verification
 
 GET    /api/auth/verify-email/:token
@@ -443,5 +445,3 @@ GitHub:
 https://github.com/poojitha-b-dev
 
 ---
-
-Updated deployment
