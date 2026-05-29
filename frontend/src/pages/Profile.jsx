@@ -33,12 +33,10 @@ const EyeIcon = ({ visible }) => visible ? (
   </svg>
 );
 
-// ── Username Panel ────────────────────────────────────────────────────────────
-function UsernamePanel({ user, authFetch }) {
-  const [newUsername, setNewUsername]         = useState("");
-  const [msg, setMsg]                         = useState({ text: "", type: "" });
-  const [loading, setLoading]                 = useState(false);
-  const [successDone, setSuccessDone]         = useState(false);
+function UsernamePanel({ user, authFetch, onUsernameUpdated }) {
+  const [newUsername, setNewUsername] = useState("");
+  const [msg, setMsg]                 = useState({ text: "", type: "" });
+  const [loading, setLoading]         = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -57,13 +55,14 @@ function UsernamePanel({ user, authFetch }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to update username.");
 
-      // Persist updated username in sessionStorage so it survives a refresh
+      // Update sessionStorage so it persists on refresh
       const stored = JSON.parse(sessionStorage.getItem("cipherseek_user") || "{}");
       sessionStorage.setItem("cipherseek_user", JSON.stringify({ ...stored, username: data.username }));
 
-      setMsg({ text: `Username changed to "${data.username}" successfully!`, type: "success" });
+      // Tell parent to update the displayed name in the sidebar
+      onUsernameUpdated(data.username);
+      setMsg({ text: "Username updated successfully!", type: "success" });
       setNewUsername("");
-      setSuccessDone(true);
     } catch (err) {
       setMsg({ text: err.message, type: "error" });
     } finally {
@@ -72,49 +71,38 @@ function UsernamePanel({ user, authFetch }) {
   };
 
   return (
-    <div className="profile-panel">
-      <div className="panel-top">
-        <span className="panel-icon">◉</span>
-        <div>
-          <h2 className="panel-title">Change Username</h2>
-          <p className="panel-desc">Current: <strong style={{ color: "var(--text)" }}>{user?.username ?? "—"}</strong></p>
-        </div>
-      </div>
+    <div className="prf-panel">
+      <h2 className="prf-panel-title">Change Username</h2>
+      <p className="prf-panel-sub">Current: <strong style={{ color: "var(--text)" }}>{user?.username ?? "—"}</strong></p>
 
-      {successDone ? (
-        <div className="alert alert-success" style={{ marginTop: 16 }}>
-          ✅ Username updated! Refresh the page to see the new name in the navbar.
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
-          {msg.text && (
-            <div className={`alert ${msg.type === "success" ? "alert-success" : "alert-error"}`}>
-              {msg.text}
-            </div>
-          )}
-          <div className="field">
-            <label className="field-label">New Username</label>
-            <input
-              className="field-input"
-              type="text"
-              placeholder="2–30 characters, letters / numbers / _ ."
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              autoComplete="off"
-              disabled={loading}
-            />
+      <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
+        {msg.text && (
+          <div className={`alert ${msg.type === "success" ? "alert-success" : "alert-error"}`}>
+            {msg.text}
           </div>
-          <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? <span className="spinner" /> : "Update Username"}
-          </button>
-        </form>
-      )}
+        )}
+        <div className="field">
+          <label className="field-label">New Username</label>
+          <input
+            className="field-input"
+            type="text"
+            placeholder="2–30 characters, letters / numbers / _ ."
+            value={newUsername}
+            onChange={(e) => setNewUsername(e.target.value)}
+            autoComplete="off"
+            disabled={loading}
+          />
+        </div>
+        <button className="btn btn-primary" type="submit" disabled={loading}>
+          {loading ? <span className="spinner" /> : "Update Username"}
+        </button>
+      </form>
     </div>
   );
 }
 
-// ── Password Panel ────────────────────────────────────────────────────────────
-function PasswordPanel({ changePassword }) {
+function PasswordPanel() {
+  const { changePassword } = useAuth();
   const [form, setForm]           = useState({ current: "", newPass: "", confirm: "" });
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew]     = useState(false);
@@ -123,15 +111,15 @@ function PasswordPanel({ changePassword }) {
   const [error, setError]         = useState("");
   const [success, setSuccess]     = useState(false);
 
-  const strength = getPasswordStrength(form.newPass);
+  const strength   = getPasswordStrength(form.newPass);
   const isAcceptable = ["medium", "strong"].includes(strength.level);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!isAcceptable) { setError("Please use a stronger password (at least Medium strength)."); return; }
-    if (form.newPass !== form.confirm) { setError("New passwords do not match."); return; }
-    if (form.current === form.newPass) { setError("New password must differ from current password."); return; }
+    if (!isAcceptable)                        { setError("Please use a stronger password (at least Medium strength)."); return; }
+    if (form.newPass !== form.confirm)         { setError("New passwords do not match."); return; }
+    if (form.current === form.newPass)         { setError("New password must differ from current password."); return; }
 
     setLoading(true);
     try {
@@ -146,15 +134,10 @@ function PasswordPanel({ changePassword }) {
 
   if (success) {
     return (
-      <div className="profile-panel">
-        <div className="panel-top">
-          <span className="panel-icon">🔑</span>
-          <div>
-            <h2 className="panel-title">Change Password</h2>
-            <p className="panel-desc">Secure your account</p>
-          </div>
-        </div>
-        <div className="alert alert-success" style={{ marginTop: 16 }}>
+      <div className="prf-panel">
+        <h2 className="prf-panel-title">Change Password</h2>
+        <p className="prf-panel-sub">Secure your account</p>
+        <div className="alert alert-success" style={{ marginTop: 20 }}>
           ✅ Password changed successfully! Your session remains active.
         </div>
       </div>
@@ -162,14 +145,9 @@ function PasswordPanel({ changePassword }) {
   }
 
   return (
-    <div className="profile-panel">
-      <div className="panel-top">
-        <span className="panel-icon">🔑</span>
-        <div>
-          <h2 className="panel-title">Change Password</h2>
-          <p className="panel-desc">Secure your account</p>
-        </div>
-      </div>
+    <div className="prf-panel">
+      <h2 className="prf-panel-title">Change Password</h2>
+      <p className="prf-panel-sub">Secure your account</p>
 
       <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
         {error && <div className="alert alert-error">{error}</div>}
@@ -177,15 +155,10 @@ function PasswordPanel({ changePassword }) {
         <div className="field">
           <label className="field-label">Current Password</label>
           <div className="password-wrapper">
-            <input
-              className="field-input"
-              type={showCurrent ? "text" : "password"}
-              placeholder="Your current password"
-              value={form.current}
+            <input className="field-input" type={showCurrent ? "text" : "password"}
+              placeholder="Your current password" value={form.current}
               onChange={(e) => setForm({ ...form, current: e.target.value })}
-              disabled={loading}
-              required
-            />
+              disabled={loading} required />
             <button type="button" className="eye-toggle"
               onClick={() => setShowCurrent(v => !v)} tabIndex={-1}>
               <EyeIcon visible={showCurrent} />
@@ -196,16 +169,10 @@ function PasswordPanel({ changePassword }) {
         <div className="field">
           <label className="field-label">New Password</label>
           <div className="password-wrapper">
-            <input
-              className="field-input"
-              type={showNew ? "text" : "password"}
-              placeholder="Min 8 characters"
-              value={form.newPass}
+            <input className="field-input" type={showNew ? "text" : "password"}
+              placeholder="Min 8 characters" value={form.newPass}
               onChange={(e) => setForm({ ...form, newPass: e.target.value })}
-              onFocus={() => setNewTouched(true)}
-              disabled={loading}
-              required
-            />
+              onFocus={() => setNewTouched(true)} disabled={loading} required />
             <button type="button" className="eye-toggle"
               onClick={() => setShowNew(v => !v)} tabIndex={-1}>
               <EyeIcon visible={showNew} />
@@ -224,15 +191,10 @@ function PasswordPanel({ changePassword }) {
 
         <div className="field">
           <label className="field-label">Confirm New Password</label>
-          <input
-            className="field-input"
-            type="password"
-            placeholder="Repeat new password"
-            value={form.confirm}
+          <input className="field-input" type="password"
+            placeholder="Repeat new password" value={form.confirm}
             onChange={(e) => setForm({ ...form, confirm: e.target.value })}
-            disabled={loading}
-            required
-          />
+            disabled={loading} required />
           {form.confirm.length > 0 && (
             <p className="confirm-match"
               style={{ color: form.newPass === form.confirm ? "#1d9e75" : "#e24b4a" }}>
@@ -242,8 +204,7 @@ function PasswordPanel({ changePassword }) {
         </div>
 
         <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-          <button className="btn btn-primary" type="submit"
-            disabled={loading || !isAcceptable}>
+          <button className="btn btn-primary" type="submit" disabled={loading || !isAcceptable}>
             {loading ? <span className="spinner" /> : "Update Password"}
           </button>
         </div>
@@ -252,261 +213,250 @@ function PasswordPanel({ changePassword }) {
   );
 }
 
-// ── Main Profile Page ─────────────────────────────────────────────────────────
-export default function Profile({ onBack }) {
-  const { user, authFetch, changePassword } = useAuth();
-  const [activeTab, setActiveTab] = useState("username");
+// ── Main ──────────────────────────────────────────────────────────────────────
+export default function Profile() {
+  const { user, authFetch } = useAuth();
+  const [activeTab, setActiveTab]   = useState("username");
+  // Local copy of username so it updates instantly after change
+  const [displayName, setDisplayName] = useState(user?.username ?? "—");
 
-  const initials = user?.username?.[0]?.toUpperCase() ?? "U";
+  const initials = displayName?.[0]?.toUpperCase() ?? "U";
 
   return (
     <>
-      <div className="page profile-page-wrap">
-
-        {/* ── Page header ── */}
+      <div className="page prf-page">
         <div className="page-header">
           <div>
             <h1 className="page-title">Profile Settings</h1>
             <p className="page-sub">Manage your account details</p>
           </div>
-          <div className="header-actions">
-            <button className="btn btn-secondary" onClick={onBack}>← Back</button>
-          </div>
         </div>
 
-        {/* ── Two-column layout ── */}
-        <div className="profile-layout">
+        {/* One single joined box */}
+        <div className="prf-box">
 
-          {/* LEFT — user card + tab buttons */}
-          <aside className="profile-sidebar">
-            {/* User card */}
-            <div className="profile-user-card">
-              <div className="profile-avatar-lg">{initials}</div>
-              <div className="profile-user-info">
-                <p className="profile-user-name">{user?.username ?? "—"}</p>
-                <p className="profile-user-email">{user?.email ?? ""}</p>
-              </div>
+          {/* LEFT sidebar */}
+          <aside className="prf-sidebar">
+            {/* User info */}
+            <div className="prf-user">
+              <div className="prf-avatar">{initials}</div>
+              <p className="prf-name">{displayName}</p>
+              <p className="prf-email">{user?.email ?? ""}</p>
             </div>
 
-            {/* Tab buttons */}
-            <nav className="profile-nav">
+            {/* Divider */}
+            <div className="prf-sidebar-divider" />
+
+            {/* Nav */}
+            <nav className="prf-nav">
               <button
-                className={`profile-nav-btn ${activeTab === "username" ? "active" : ""}`}
+                className={`prf-nav-btn ${activeTab === "username" ? "active" : ""}`}
                 onClick={() => setActiveTab("username")}
               >
-                <span className="pnb-icon">◉</span>
-                <span>Change Username</span>
+                <span>◉</span> Change Username
               </button>
               <button
-                className={`profile-nav-btn ${activeTab === "password" ? "active" : ""}`}
+                className={`prf-nav-btn ${activeTab === "password" ? "active" : ""}`}
                 onClick={() => setActiveTab("password")}
               >
-                <span className="pnb-icon">🔑</span>
-                <span>Change Password</span>
+                <span>🔑</span> Change Password
               </button>
             </nav>
           </aside>
 
-          {/* RIGHT — active panel */}
-          <div className="profile-content">
+          {/* Vertical divider between sidebar and content */}
+          <div className="prf-divider" />
+
+          {/* RIGHT content */}
+          <div className="prf-content">
             {activeTab === "username" && (
-              <UsernamePanel user={user} authFetch={authFetch} />
+              <UsernamePanel
+                user={{ ...user, username: displayName }}
+                authFetch={authFetch}
+                onUsernameUpdated={(name) => setDisplayName(name)}
+              />
             )}
-            {activeTab === "password" && (
-              <PasswordPanel changePassword={changePassword} />
-            )}
+            {activeTab === "password" && <PasswordPanel />}
           </div>
         </div>
       </div>
 
       <style>{`
-        /* ── Layout ── */
-        .profile-page-wrap {
-          max-width: 900px;
-        }
+        .prf-page { max-width: 860px; }
 
-        .profile-layout {
+        /* The single joined box */
+        .prf-box {
           display: grid;
-          grid-template-columns: 240px 1fr;
-          gap: 24px;
-          align-items: start;
-        }
-
-        /* ── Sidebar ── */
-        .profile-sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .profile-user-card {
+          grid-template-columns: 220px 1px 1fr;
           background: var(--bg-2);
           border: 1px solid var(--border);
           border-radius: var(--radius);
-          padding: 24px 20px;
+          overflow: hidden;
+          min-height: 420px;
+        }
+
+        /* ── Sidebar ── */
+        .prf-sidebar {
+          display: flex;
+          flex-direction: column;
+          padding: 28px 20px;
+          background: var(--bg-3);
+        }
+
+        .prf-user {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 12px;
           text-align: center;
+          gap: 6px;
+          padding-bottom: 4px;
         }
 
-        .profile-avatar-lg {
-          width: 64px;
-          height: 64px;
+        .prf-avatar {
+          width: 60px;
+          height: 60px;
           border-radius: 50%;
           background: var(--accent);
           color: #fff;
-          font-size: 1.6rem;
+          font-size: 1.5rem;
           font-weight: 700;
           display: flex;
           align-items: center;
           justify-content: center;
           box-shadow: 0 0 0 4px var(--accent-glow);
-          flex-shrink: 0;
+          margin-bottom: 6px;
         }
 
-        .profile-user-name {
-          font-size: 1rem;
+        .prf-name {
+          font-size: 15px;
           font-weight: 700;
           color: var(--text);
           margin: 0;
         }
 
-        .profile-user-email {
-          font-size: 0.78rem;
+        .prf-email {
+          font-size: 11px;
           color: var(--text-2);
           margin: 0;
           word-break: break-all;
         }
 
-        /* ── Sidebar nav ── */
-        .profile-nav {
+        .prf-sidebar-divider {
+          height: 1px;
+          background: var(--border);
+          margin: 20px 0;
+        }
+
+        /* Nav buttons */
+        .prf-nav {
           display: flex;
           flex-direction: column;
           gap: 4px;
         }
 
-        .profile-nav-btn {
+        .prf-nav-btn {
           display: flex;
           align-items: center;
-          gap: 10px;
-          padding: 11px 14px;
+          gap: 8px;
+          padding: 10px 12px;
           border-radius: var(--radius-sm);
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 500;
           color: var(--text-2);
-          background: var(--bg-2);
-          border: 1px solid var(--border);
+          background: transparent;
+          border: 1px solid transparent;
           text-align: left;
-          transition: all 0.18s;
           cursor: pointer;
+          transition: all 0.18s;
           width: 100%;
         }
 
-        .profile-nav-btn:hover {
+        .prf-nav-btn:hover {
           color: var(--text);
-          border-color: var(--border-h);
-          background: var(--bg-3);
+          background: var(--bg-2);
+          border-color: var(--border);
         }
 
-        .profile-nav-btn.active {
+        .prf-nav-btn.active {
           color: var(--accent);
           background: var(--accent-glow);
           border-color: var(--border-h);
         }
 
-        .pnb-icon { font-size: 15px; flex-shrink: 0; }
+        /* Vertical divider line */
+        .prf-divider {
+          background: var(--border);
+          width: 1px;
+        }
 
-        /* ── Right panel ── */
-        .profile-panel {
-          background: var(--bg-2);
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
+        /* Right content area */
+        .prf-content {
+          padding: 0;
+          min-width: 0;
+        }
+
+        .prf-panel {
           padding: 28px;
+          height: 100%;
+          box-sizing: border-box;
         }
 
-        .panel-top {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 4px;
-        }
-
-        .panel-icon {
-          font-size: 1.4rem;
-          line-height: 1;
-        }
-
-        .panel-title {
+        .prf-panel-title {
           font-size: 1.1rem;
           font-weight: 700;
           color: var(--text);
-          margin: 0 0 2px;
+          margin: 0 0 4px;
         }
 
-        .panel-desc {
+        .prf-panel-sub {
           font-size: 13px;
           color: var(--text-2);
           margin: 0;
         }
 
-        /* ── Responsive ── */
-
-        /* Tablet */
-        @media (max-width: 768px) {
-          .profile-layout {
+        /* ── Responsive: tablet ── */
+        @media (max-width: 700px) {
+          .prf-box {
             grid-template-columns: 1fr;
+            grid-template-rows: auto 1px auto;
           }
 
-          .profile-sidebar {
-            flex-direction: row;
-            flex-wrap: wrap;
+          .prf-sidebar {
+            padding: 20px;
           }
 
-          .profile-user-card {
+          .prf-user {
             flex-direction: row;
             text-align: left;
-            flex: 1;
-            min-width: 200px;
+            gap: 14px;
           }
 
-          .profile-nav {
+          .prf-avatar { margin-bottom: 0; flex-shrink: 0; }
+
+          .prf-nav {
             flex-direction: row;
-            flex: 1;
-            min-width: 200px;
           }
 
-          .profile-nav-btn {
+          .prf-nav-btn {
             flex: 1;
             justify-content: center;
           }
+
+          .prf-sidebar-divider { display: none; }
+
+          /* Horizontal divider between sidebar and content on mobile */
+          .prf-divider {
+            width: 100%;
+            height: 1px;
+          }
+
+          .prf-panel { padding: 20px; }
         }
 
-        /* Mobile */
-        @media (max-width: 480px) {
-          .profile-panel {
-            padding: 20px 16px;
-          }
-
-          .profile-sidebar {
-            flex-direction: column;
-          }
-
-          .profile-user-card {
-            flex-direction: column;
-            text-align: center;
-          }
-
-          .profile-nav {
-            flex-direction: row;
-          }
-
-          .profile-nav-btn {
-            font-size: 13px;
-            padding: 10px 10px;
-            gap: 6px;
-          }
+        /* ── Responsive: small mobile ── */
+        @media (max-width: 400px) {
+          .prf-user { flex-direction: column; text-align: center; }
+          .prf-nav-btn { font-size: 12px; padding: 9px 8px; gap: 5px; }
         }
       `}</style>
     </>
