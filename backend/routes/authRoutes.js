@@ -491,5 +491,47 @@ router.get('/me', authenticateUser, async (req, res) => {
     return res.status(500).json({ message: 'Server error.' });
   }
 });
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD THIS BLOCK to backend/routes/authRoutes.js
+// Paste it just before the final line:  module.exports = router;
+// ─────────────────────────────────────────────────────────────────────────────
 
+// ─── POST /api/auth/change-username ──────────────────────────────────────────
+router.post('/change-username', authenticateUser, async (req, res) => {
+  const { newUsername } = req.body;
+
+  if (!newUsername || !newUsername.trim()) {
+    return res.status(400).json({ message: 'Username cannot be empty.' });
+  }
+
+  const trimmed = newUsername.trim();
+
+  // Match the exact same rules used in /register
+  if (trimmed.length < 2 || trimmed.length > 30) {
+    return res.status(400).json({ message: 'Username must be between 2 and 30 characters.' });
+  }
+  if (!USERNAME_RE.test(trimmed)) {
+    return res.status(400).json({
+      message: 'Username can only contain letters, numbers, underscores (_) and dots (.).',
+    });
+  }
+
+  try {
+    // Check if the new username is already taken by someone else
+    const existing = await dbQuery(
+      'SELECT id FROM users WHERE username = ? AND id != ? LIMIT 1',
+      [trimmed, req.user.userId]
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({ message: 'Username is already taken.' });
+    }
+
+    await dbQuery('UPDATE users SET username = ? WHERE id = ?', [trimmed, req.user.userId]);
+
+    return res.status(200).json({ message: 'Username updated successfully.', username: trimmed });
+  } catch (err) {
+    console.error('Change username error:', err);
+    return res.status(500).json({ message: 'Server error.' });
+  }
+});
 module.exports = router;

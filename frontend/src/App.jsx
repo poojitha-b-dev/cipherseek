@@ -14,6 +14,7 @@ import VerifyEmail from "./pages/VerifyEmail";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import ChangePassword from "./pages/ChangePassword";
+import Profile from "./pages/Profile";
 import "./index.css";
 
 function getCurrentRoute() {
@@ -84,6 +85,7 @@ function AppRoutes() {
         {page === "search"          && <Search />}
         {page === "about"           && <About />}
         {page === "change-password" && <ChangePassword onBack={() => setPage("dashboard")} />}
+        {page === "profile"         && <Profile onBack={() => setPage("dashboard")} />}
       </main>
     </div>
   );

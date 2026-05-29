@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { id: "upload",    label: "Encrypt & Store", icon: "⬢", mobileIcon: "🔒" },
   { id: "search",    label: "Search",          icon: "◎", mobileIcon: "🔍" },
   { id: "about",     label: "About",           icon: "◈", mobileIcon: "ℹ️" },
+  { id: "profile",   label: "Profile",         icon: "◉", mobileIcon: "👤" },
 ];
 
 function ShieldIcon() {
@@ -62,7 +63,7 @@ export default function Navbar({ page, setPage }) {
           <button className="theme-toggle" onClick={toggle} title="Toggle theme">
             {dark ? "☀" : "🌙"}
           </button>
-          <div className="user-pill">
+          <div className="user-pill" onClick={() => navigate("profile")} style={{ cursor: "pointer" }} title="View Profile">
             <span className="user-avatar">{user?.username?.[0]?.toUpperCase() || "U"}</span>
             <span className="user-name">{user?.username || user?.email}</span>
           </div>
